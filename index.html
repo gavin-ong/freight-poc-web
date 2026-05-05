@@ -6,57 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 24px;
-      max-width: 1000px;
-    }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 24px; max-width: 1000px; }
     h1 { margin-bottom: 4px; }
     .muted { color: #666; font-size: 13px; }
-    .card {
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 16px;
-      margin-top: 20px;
-    }
-    input, button {
-      padding: 8px;
-      margin-top: 6px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 12px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background-color: #f5f5f5;
-    }
-    .err {
-      color: #b00020;
-      font-size: 13px;
-      margin-top: 10px;
-      white-space: pre-wrap;
-    }
-    .ok {
-      color: #0b6b0b;
-      font-size: 13px;
-      margin-top: 10px;
-      white-space: pre-wrap;
-    }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-top: 20px; }
+    input, button { padding: 8px; margin-top: 6px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f5f5f5; }
+    .err { color: #b00020; font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
   </style>
 </head>
 
 <body>
-
   <h1>Freight PRD POC</h1>
-  <div class="muted">
-    Real users · Real login · Real branch‑level security
-  </div>
+  <div class="muted">Real users · Real login · Real branch‑level security</div>
 
   <!-- LOGIN CARD -->
   <div class="card" id="authCard">
@@ -106,10 +70,8 @@
     </table>
   </div>
 
-  <!-- Supabase library -->
+  <!-- IMPORTANT: These must be real script tags -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-  <!-- Your app logic -->
   <script src="./app.js"></script>
 </body>
 </html>
