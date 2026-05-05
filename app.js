@@ -1,24 +1,19 @@
 // ===============================
 // Freight PRD POC - app.js (FULL)
-// Fixes: "Login does nothing" + surfaces auth errors
 // ===============================
 
-// ✅ Your Supabase config (SAFE for browser: publishable/anon key)
 const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
-// Create client
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // UI elements
-const authCard = document.getElementById("authCard");
-const appCard = document.getElementById("appCard");
-
 const authMsg = document.getElementById("authMsg");
 const authErr = document.getElementById("authErr");
-const jobMsg = document.getElementById("jobMsg");
-const jobErr = document.getElementById("jobErr");
+const jobMsg  = document.getElementById("jobMsg");
+const jobErr  = document.getElementById("jobErr");
 
+const appCard = document.getElementById("appCard");
 const branchLabel = document.getElementById("branchLabel");
 const userLabel = document.getElementById("userLabel");
 const jobTable = document.getElementById("jobTable");
@@ -34,19 +29,10 @@ const jobNoEl = document.getElementById("jobNo");
 
 let currentBranch = null;
 
-// Helpers
-function setAuthStatus(msg) {
-  authMsg.textContent = msg || "";
-}
-function setAuthError(msg) {
-  authErr.textContent = msg || "";
-}
-function setJobStatus(msg) {
-  jobMsg.textContent = msg || "";
-}
-function setJobError(msg) {
-  jobErr.textContent = msg || "";
-}
+function setAuthStatus(msg) { authMsg.textContent = msg || ""; }
+function setAuthError(msg)  { authErr.textContent = msg || ""; }
+function setJobStatus(msg)  { jobMsg.textContent = msg || ""; }
+function setJobError(msg)   { jobErr.textContent = msg || ""; }
 
 function renderJobs(rows) {
   jobTable.innerHTML = "";
@@ -67,20 +53,12 @@ async function loadProfileAndJobs() {
   setJobStatus("Loading profile + jobs...");
 
   const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr) {
-    setJobError("Failed to get user: " + userErr.message);
-    return;
-  }
-
+  if (userErr) { setJobError("Failed to get user: " + userErr.message); return; }
   const user = userData?.user;
-  if (!user) {
-    setJobError("No active user session.");
-    return;
-  }
+  if (!user) { setJobError("No active user session."); return; }
 
   userLabel.textContent = user.email ? `Logged in as: ${user.email}` : `User ID: ${user.id}`;
 
-  // Load profile (branch + role)
   const { data: profile, error: pErr } = await supabase
     .from("profiles")
     .select("branch_code, role")
@@ -90,33 +68,24 @@ async function loadProfileAndJobs() {
   if (pErr) {
     currentBranch = null;
     branchLabel.textContent = "-";
-    setJobError(
-      "Profile not found. Create your profiles row in Supabase.\n" +
-      "Error: " + pErr.message + "\n" +
-      "User ID: " + user.id
-    );
     setJobStatus("");
+    setJobError("Profile not found. Create profiles row.\nError: " + pErr.message + "\nUser ID: " + user.id);
     return;
   }
 
   currentBranch = profile.branch_code;
   branchLabel.textContent = `${profile.branch_code} (${profile.role})`;
 
-  // Load jobs (RLS should filter by branch)
   const { data: jobs, error: jErr } = await supabase
     .from("jobs")
     .select("job_no, branch_code, status, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (jErr) {
-    setJobError("Failed to load jobs: " + jErr.message);
-    setJobStatus("");
-    return;
-  }
+  if (jErr) { setJobError("Failed to load jobs: " + jErr.message); setJobStatus(""); return; }
 
   renderJobs(jobs);
-  setJobStatus(`Loaded ${jobs.length} jobs (RLS filtered).`);
+  setJobStatus(`Loaded ${jobs.length} jobs.`);
 }
 
 async function refreshUI() {
@@ -124,22 +93,17 @@ async function refreshUI() {
   setJobError("");
 
   const { data: sessionData, error: sErr } = await supabase.auth.getSession();
-  if (sErr) {
-    setAuthError("Failed to get session: " + sErr.message);
-    return;
-  }
+  if (sErr) { setAuthError("Failed to get session: " + sErr.message); return; }
 
   const session = sessionData?.session;
 
   if (session) {
-    // Logged in UI
     btnLogin.style.display = "none";
     btnLogout.style.display = "inline-block";
     appCard.style.display = "block";
     setAuthStatus("Session active.");
     await loadProfileAndJobs();
   } else {
-    // Logged out UI
     btnLogin.style.display = "inline-block";
     btnLogout.style.display = "none";
     appCard.style.display = "none";
@@ -152,42 +116,24 @@ async function refreshUI() {
   }
 }
 
-// Events
 btnLogin.addEventListener("click", async () => {
   setAuthError("");
   setAuthStatus("Logging in...");
 
   const email = (emailEl.value || "").trim();
   const password = passwordEl.value || "";
+  if (!email || !password) { setAuthStatus(""); setAuthError("Please enter email + password."); return; }
 
-  if (!email || !password) {
-    setAuthStatus("");
-    setAuthError("Please enter email + password.");
-    return;
-  }
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { setAuthStatus(""); setAuthError("Login failed: " + error.message); return; }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    setAuthStatus("");
-    setAuthError("Login failed: " + error.message);
-    console.error("Supabase login error:", error);
-    return;
-  }
-
-  // Force-refresh session/UI immediately (fixes “Login does nothing”)
   setAuthStatus("Login success.");
   await refreshUI();
 });
 
 btnLogout.addEventListener("click", async () => {
-  setAuthError("");
   const { error } = await supabase.auth.signOut();
-  if (error) {
-    setAuthError("Logout failed: " + error.message);
-    console.error("Supabase logout error:", error);
-    return;
-  }
+  if (error) { setAuthError("Logout failed: " + error.message); return; }
   setAuthStatus("Logged out.");
   await refreshUI();
 });
@@ -196,38 +142,22 @@ btnCreate.addEventListener("click", async () => {
   setJobError("");
   setJobStatus("");
 
-  if (!currentBranch) {
-    setJobError("No branch found. Insert your profiles row first.");
-    return;
-  }
+  if (!currentBranch) { setJobError("No branch found. Insert profiles row first."); return; }
 
   const jobNo = (jobNoEl.value || "").trim();
-  if (!jobNo) {
-    setJobError("Please enter a Job No.");
-    return;
-  }
+  if (!jobNo) { setJobError("Please enter a Job No."); return; }
 
-  const { data: userData, error: uErr } = await supabase.auth.getUser();
-  if (uErr) {
-    setJobError("Cannot read user: " + uErr.message);
-    return;
-  }
+  const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user;
 
-  const { error } = await supabase.from("jobs").insert([
-    {
-      job_no: jobNo,
-      branch_code: currentBranch, // locked to profile
-      status: "CREATED",
-      created_by: user?.id
-    }
-  ]);
+  const { error } = await supabase.from("jobs").insert([{
+    job_no: jobNo,
+    branch_code: currentBranch,
+    status: "CREATED",
+    created_by: user?.id
+  }]);
 
-  if (error) {
-    setJobError("Create failed (RLS may block): " + error.message);
-    console.error("Insert job error:", error);
-    return;
-  }
+  if (error) { setJobError("Create failed: " + error.message); return; }
 
   setJobStatus("Job created: " + jobNo);
   jobNoEl.value = "";
@@ -236,13 +166,10 @@ btnCreate.addEventListener("click", async () => {
 
 btnRefresh.addEventListener("click", loadProfileAndJobs);
 
-// Auth state listener (keeps UI in sync)
-supabase.auth.onAuthStateChange((_event, _session) => {
+supabase.auth.onAuthStateChange(() => {
   refreshUI();
 });
 
-// IMPORTANT: initial render based on existing session (fixes “Login does nothing”)
 (async () => {
   await refreshUI();
 })();
-``
