@@ -1,13 +1,14 @@
 // ===============================
-// Freight PRD POC - app.js (NO CDN)
-// Uses REST directly: /auth/v1 + /rest/v1
+// Freight PRD POC - app.js (FINAL / NO CDN)
+// Uses REST:
+//   Auth: /auth/v1/token (password + refresh grants)
+//   Data: /rest/v1 (PostgREST)
 // ===============================
 
-// Your Supabase config
 const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
-// UI elements
+// UI
 const authMsg = document.getElementById("authMsg");
 const authErr = document.getElementById("authErr");
 const jobMsg  = document.getElementById("jobMsg");
@@ -27,11 +28,10 @@ const btnCreate = document.getElementById("btnCreate");
 const btnRefresh = document.getElementById("btnRefresh");
 const jobNoEl = document.getElementById("jobNo");
 
-// Storage keys
-const LS_ACCESS = "sb_access_token";
+// Local storage keys
+const LS_ACCESS  = "sb_access_token";
 const LS_REFRESH = "sb_refresh_token";
-const LS_USER = "sb_user_json";
-const LS_PROFILE = "sb_profile_json";
+const LS_USER    = "sb_user_json";
 
 let currentProfile = null;
 
@@ -54,12 +54,12 @@ function clearSession() {
   localStorage.removeItem(LS_ACCESS);
   localStorage.removeItem(LS_REFRESH);
   localStorage.removeItem(LS_USER);
-  localStorage.removeItem(LS_PROFILE);
   currentProfile = null;
 }
 
 async function apiFetch(path, { method = "GET", token = "", headers = {}, body = null } = {}) {
   const url = `${SUPABASE_URL}${path}`;
+
   const h = {
     "apikey": SUPABASE_ANON_KEY,
     ...headers,
@@ -77,15 +77,17 @@ async function apiFetch(path, { method = "GET", token = "", headers = {}, body =
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
 
   if (!res.ok) {
-    const msg = (json && (json.error_description || json.msg || json.message || json.error)) || text || `HTTP ${res.status}`;
+    const msg =
+      (json && (json.error_description || json.msg || json.message || json.error)) ||
+      text ||
+      `HTTP ${res.status}`;
     throw new Error(msg);
   }
   return json;
 }
 
-// Auth: password login via REST (/auth/v1) 【4-05ab6a】【5-0ba29c】
+// Auth: password login (GoTrue style via /auth/v1/token) 【1-25dd10】【2-0495b0】
 async function loginWithPassword(email, password) {
-  // GoTrue password grant
   return apiFetch(`/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -93,6 +95,7 @@ async function loginWithPassword(email, password) {
   });
 }
 
+// Refresh token flow 【1-25dd10】【2-0495b0】
 async function refreshAccessTokenIfNeeded() {
   const access = getAccessToken();
   if (access) return access;
@@ -100,7 +103,6 @@ async function refreshAccessTokenIfNeeded() {
   const refresh = getRefreshToken();
   if (!refresh) return "";
 
-  // refresh_token grant
   const data = await apiFetch(`/auth/v1/token?grant_type=refresh_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -116,7 +118,7 @@ async function refreshAccessTokenIfNeeded() {
   return data.access_token || "";
 }
 
-// Data REST API (/rest/v1) 【3-5b3461】【1-78001c】
+// Data REST API (/rest/v1) 【3-bd2a79】【4-1f174d】
 async function loadProfile() {
   const user = getUser();
   if (!user?.id) throw new Error("No user in session.");
@@ -124,18 +126,13 @@ async function loadProfile() {
   const token = await refreshAccessTokenIfNeeded();
   if (!token) throw new Error("No access token.");
 
-  const rows = await apiFetch(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=branch_code,role`, {
-    method: "GET",
-    token,
-    headers: { "Accept": "application/json" },
-  });
+  const rows = await apiFetch(
+    `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=branch_code,role`,
+    { method: "GET", token, headers: { "Accept": "application/json" } }
+  );
 
-  if (!rows || rows.length === 0) {
-    throw new Error(`Profile not found for user id: ${user.id}`);
-  }
-
+  if (!rows || rows.length === 0) throw new Error(`Profile not found for user id: ${user.id}`);
   currentProfile = rows[0];
-  localStorage.setItem(LS_PROFILE, JSON.stringify(currentProfile));
   return currentProfile;
 }
 
@@ -160,11 +157,10 @@ async function loadJobs() {
   const token = await refreshAccessTokenIfNeeded();
   if (!token) throw new Error("No access token.");
 
-  const rows = await apiFetch(`/rest/v1/jobs?select=job_no,branch_code,status,created_at&order=created_at.desc&limit=50`, {
-    method: "GET",
-    token,
-    headers: { "Accept": "application/json" },
-  });
+  const rows = await apiFetch(
+    `/rest/v1/jobs?select=job_no,branch_code,status,created_at&order=created_at.desc&limit=50`,
+    { method: "GET", token, headers: { "Accept": "application/json" } }
+  );
 
   renderJobs(rows);
   setJobStatus(`Loaded ${rows.length} jobs.`);
@@ -174,7 +170,6 @@ async function createJob(jobNo) {
   const user = getUser();
   const token = await refreshAccessTokenIfNeeded();
   if (!token) throw new Error("No access token.");
-
   if (!currentProfile?.branch_code) throw new Error("No branch in profile.");
 
   await apiFetch(`/rest/v1/jobs`, {
@@ -201,7 +196,6 @@ async function refreshUI() {
   const token = await refreshAccessTokenIfNeeded();
 
   if (user && token) {
-    // Logged in
     btnLogin.style.display = "none";
     btnLogout.style.display = "inline-block";
     appCard.style.display = "block";
@@ -219,7 +213,6 @@ async function refreshUI() {
       setJobError(String(e.message || e));
     }
   } else {
-    // Logged out
     btnLogin.style.display = "inline-block";
     btnLogout.style.display = "none";
     appCard.style.display = "none";
@@ -247,12 +240,8 @@ btnLogin.addEventListener("click", async () => {
   }
 
   try {
-    const data = await loginWithPassword(email, password);
-    setSession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      user: data.user,
-    });
+    const data = await loginWithPassword(email, password); // 【1-25dd10】【2-0495b0】
+    setSession({ access_token: data.access_token, refresh_token: data.refresh_token, user: data.user });
     setAuthStatus("Login success.");
     await refreshUI();
   } catch (e) {
@@ -293,3 +282,4 @@ btnCreate.addEventListener("click", async () => {
   setAuthStatus("App loaded.");
   await refreshUI();
 })();
+``
