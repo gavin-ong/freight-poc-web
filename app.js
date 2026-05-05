@@ -2,7 +2,7 @@
 // Freight PRD POC - app.js
 // ===============================
 
-// ✅ Your Supabase config (safe to use in browser: publishable/anon key)
+// ✅ Your Supabase config (SAFE in browser: publishable/anon key)
 const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -60,6 +60,7 @@ async function loadProfileAndJobs() {
     setJobStatus("Failed to get user: " + userErr.message);
     return;
   }
+
   const user = userData?.user;
   if (!user) {
     setJobStatus("No active user session.");
@@ -68,7 +69,7 @@ async function loadProfileAndJobs() {
 
   userLabel.textContent = user.email ? `Logged in as: ${user.email}` : `User ID: ${user.id}`;
 
-  // Load profile (branch + role) - REQUIRED for branch filtering logic
+  // Load profile (branch + role)
   const { data: profile, error: pErr } = await supabase
     .from("profiles")
     .select("branch_code, role")
@@ -79,9 +80,7 @@ async function loadProfileAndJobs() {
     currentBranch = null;
     branchLabel.textContent = "-";
     setJobStatus(
-      "Profile not found (expected if profiles row missing). " +
-      "Create your profiles row in Supabase for this user. Error: " +
-      pErr.message
+      "Profile not found. Create your profiles row in Supabase. Error: " + pErr.message
     );
     return;
   }
@@ -89,7 +88,7 @@ async function loadProfileAndJobs() {
   currentBranch = profile.branch_code;
   branchLabel.textContent = `${profile.branch_code} (${profile.role})`;
 
-  // Load jobs (RLS should restrict this automatically to branch)
+  // Load jobs (RLS should filter by branch)
   const { data: jobs, error: jErr } = await supabase
     .from("jobs")
     .select("job_no, branch_code, status, created_at")
@@ -182,11 +181,10 @@ btnCreate.addEventListener("click", async () => {
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user;
 
-  // IMPORTANT: branch_code comes from user's profile to prevent cross-branch inserts
   const { error } = await supabase.from("jobs").insert([
     {
       job_no: jobNo,
-      branch_code: currentBranch,
+      branch_code: currentBranch, // branch locked to profile
       status: "CREATED",
       created_by: user?.id
     }
