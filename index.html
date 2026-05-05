@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Freight PRD POC</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
     body { font-family: Arial, Helvetica, sans-serif; margin: 24px; max-width: 1000px; }
     h1 { margin-bottom: 4px; }
@@ -49,7 +50,7 @@
     </div>
 
     <h3>Create Job</h3>
-        <input id="jobNo" placeholder="Job No (e.g. POC-0002)" />
+    <input id="jobNo" placeholder="Job No (e.g. POC-0002)" />
     <button id="btnCreate">Create Job</button>
     <div id="jobMsg" class="muted"></div>
     <div id="jobErr" class="err"></div>
@@ -70,7 +71,7 @@
     </table>
   </div>
 
-  <!-- Only your app code. No external CDN -->
-  ./app.jsscript>
+  <!-- NOTE: No CDN libraries. Corporate networks often block unpkg/jsdelivr -->
+  <script src="./app.js" defer></script>
 </body>
 </html>
