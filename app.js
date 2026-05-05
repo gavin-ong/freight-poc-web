@@ -2,10 +2,22 @@
 // Freight PRD POC - app.js (FULL)
 // ===============================
 
+console.log("app.js loaded. window.supabase =", window.supabase);
+
 const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if (!window.supabase) {
+  const msg = "Supabase library not loaded. Check index.html script tag / CDN blocked.";
+  console.error(msg);
+  const authErrEl = document.getElementById("authErr");
+  if (authErrEl) authErrEl.textContent = msg;
+}
+
+// Create client
+const supabase = window.supabase?.createClient
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
 // UI elements
 const authMsg = document.getElementById("authMsg");
@@ -29,10 +41,10 @@ const jobNoEl = document.getElementById("jobNo");
 
 let currentBranch = null;
 
-function setAuthStatus(msg) { authMsg.textContent = msg || ""; }
-function setAuthError(msg)  { authErr.textContent = msg || ""; }
-function setJobStatus(msg)  { jobMsg.textContent = msg || ""; }
-function setJobError(msg)   { jobErr.textContent = msg || ""; }
+function setAuthStatus(msg) { if (authMsg) authMsg.textContent = msg || ""; }
+function setAuthError(msg)  { if (authErr) authErr.textContent = msg || ""; }
+function setJobStatus(msg)  { if (jobMsg) jobMsg.textContent = msg || ""; }
+function setJobError(msg)   { if (jobErr) jobErr.textContent = msg || ""; }
 
 function renderJobs(rows) {
   jobTable.innerHTML = "";
@@ -54,6 +66,7 @@ async function loadProfileAndJobs() {
 
   const { data: userData, error: userErr } = await supabase.auth.getUser();
   if (userErr) { setJobError("Failed to get user: " + userErr.message); return; }
+
   const user = userData?.user;
   if (!user) { setJobError("No active user session."); return; }
 
@@ -117,6 +130,8 @@ async function refreshUI() {
 }
 
 btnLogin.addEventListener("click", async () => {
+  if (!supabase) return;
+
   setAuthError("");
   setAuthStatus("Logging in...");
 
@@ -132,6 +147,8 @@ btnLogin.addEventListener("click", async () => {
 });
 
 btnLogout.addEventListener("click", async () => {
+  if (!supabase) return;
+
   const { error } = await supabase.auth.signOut();
   if (error) { setAuthError("Logout failed: " + error.message); return; }
   setAuthStatus("Logged out.");
@@ -139,6 +156,8 @@ btnLogout.addEventListener("click", async () => {
 });
 
 btnCreate.addEventListener("click", async () => {
+  if (!supabase) return;
+
   setJobError("");
   setJobStatus("");
 
@@ -164,12 +183,17 @@ btnCreate.addEventListener("click", async () => {
   await loadProfileAndJobs();
 });
 
-btnRefresh.addEventListener("click", loadProfileAndJobs);
-
-supabase.auth.onAuthStateChange(() => {
-  refreshUI();
+btnRefresh.addEventListener("click", () => {
+  if (!supabase) return;
+  loadProfileAndJobs();
 });
 
-(async () => {
-  await refreshUI();
-})();
+if (supabase) {
+  supabase.auth.onAuthStateChange(() => {
+    refreshUI();
+  });
+
+  (async () => {
+    await refreshUI();
+  })();
+}
