@@ -68,13 +68,10 @@
     </div>
   </div>
 
-  <!-- ✅ Stable CDN (do NOT use the broken unpkg line) -->
+  <!-- ✅ GUARANTEED correct script tag -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    // =========================
-    // CONFIG (already filled)
-    // =========================
     const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
     const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -84,21 +81,22 @@
     const jobsDiv = document.getElementById("jobs");
     const appDiv  = document.getElementById("app");
 
-    const setStatus = (t, cls="muted") => { statusBox.className = "box " + cls; statusBox.textContent = t; }
-    const setAuthMsg = (t, cls="muted") => { authMsg.className = "box " + cls; authMsg.textContent = t; }
-    const setJobMsg = (t, cls="muted") => { jobMsg.className = "box " + cls; jobMsg.textContent = t; }
+    const setStatus  = (t, cls="muted") => { statusBox.className = "box " + cls; statusBox.textContent = t; };
+    const setAuthMsg = (t, cls="muted") => { authMsg.className   = "box " + cls; authMsg.textContent   = t; };
+    const setJobMsg  = (t, cls="muted") => { jobMsg.className    = "box " + cls; jobMsg.textContent    = t; };
 
     const esc = s => (s ?? "").toString().replace(/[&<>"']/g, m => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     }[m]));
 
+    // If this triggers, your CDN is blocked or script not loaded
     if (!window.supabase) {
-      setStatus("❌ Supabase JS not loaded (CDN blocked).", "err");
+      setStatus("❌ Supabase JS not loaded. CDN blocked or script failed.", "err");
+      setAuthMsg("❌ Supabase JS not loaded.", "err");
       throw new Error("Supabase JS not loaded");
     }
 
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
     let currentUser = null;
 
     document.getElementById("btnLogin").onclick = login;
@@ -106,23 +104,41 @@
     document.getElementById("btnCreateJob").onclick = createJob;
     document.getElementById("btnRefreshJobs").onclick = loadJobs;
 
-    // =========================
-    // AUTH
-    // =========================
+    // helper: timeout wrapper so "Logging in..." can’t hang forever
+    function withTimeout(promise, ms = 12000) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout after " + ms + "ms")), ms))
+      ]);
+    }
+
     async function login() {
       setAuthMsg("Logging in...", "muted");
 
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) return setAuthMsg("❌ Login failed: " + error.message, "err");
+      try {
+        const { data, error } = await withTimeout(
+          sb.auth.signInWithPassword({ email, password }),
+          12000
+        );
 
-      currentUser = data.user;
-      setAuthMsg("✅ Logged in: " + currentUser.email + " | " + currentUser.id, "ok");
-      setStatus("Logged in.", "ok");
-      appDiv.style.display = "block";
-      await loadJobs();
+        if (error) {
+          setAuthMsg("❌ Login failed: " + error.message, "err");
+          setStatus("Not logged in.", "muted");
+          return;
+        }
+
+        currentUser = data.user;
+        setAuthMsg("✅ Logged in: " + currentUser.email + " | " + currentUser.id, "ok");
+        setStatus("Logged in.", "ok");
+        appDiv.style.display = "block";
+        await loadJobs();
+      } catch (e) {
+        setAuthMsg("❌ Login stuck / failed: " + e.message, "err");
+        setStatus("Login failed.", "err");
+      }
     }
 
     async function logout() {
@@ -134,24 +150,25 @@
     }
 
     async function restoreSession() {
-      const { data: { session } } = await sb.auth.getSession();
-      if (session?.user) {
-        currentUser = session.user;
-        setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
-        setStatus("Logged in (restored session).", "ok");
-        appDiv.style.display = "block";
-        await loadJobs();
-      } else {
-        setAuthMsg("Not logged in.", "muted");
-        setStatus("Not logged in.", "muted");
-        appDiv.style.display = "none";
+      try {
+        const { data: { session } } = await withTimeout(sb.auth.getSession(), 8000);
+        if (session?.user) {
+          currentUser = session.user;
+          setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
+          setStatus("Logged in (restored session).", "ok");
+          appDiv.style.display = "block";
+          await loadJobs();
+        } else {
+          setAuthMsg("Not logged in.", "muted");
+          setStatus("Not logged in.", "muted");
+          appDiv.style.display = "none";
+        }
+      } catch (e) {
+        setAuthMsg("❌ Session restore failed: " + e.message, "err");
+        setStatus("❌ Session restore failed.", "err");
       }
     }
 
-    // =========================
-    // JOBS (your schema)
-    // jobs: job_id (uuid PK), job_no (unique), branch_code, status, created_by (uuid), created_at
-    // =========================
     async function createJob() {
       if (!currentUser) return setJobMsg("❌ Login first.", "err");
 
@@ -160,7 +177,6 @@
       const status = document.getElementById("job_status").value;
 
       if (!job_no) return setJobMsg("❌ Job No required.", "err");
-
       setJobMsg("Creating job...", "muted");
 
       const { data, error } = await sb
@@ -173,7 +189,6 @@
       setJobMsg("✅ Job created: " + data[0].job_no + " | job_id=" + data[0].job_id, "ok");
       document.getElementById("job_no").value = "";
 
-      // Auto log event
       await sb.from("job_events").insert({
         job_id: data[0].job_id,
         event_type: "CREATED",
@@ -184,8 +199,6 @@
     }
 
     async function loadJobs() {
-      setJobMsg("Loading jobs...", "muted");
-
       const { data, error } = await sb
         .from("jobs")
         .select("job_id, job_no, branch_code, status, created_at")
@@ -198,8 +211,6 @@
         return;
       }
 
-      setJobMsg("Loaded " + data.length + " jobs.", "muted");
-
       if (!data || data.length === 0) {
         jobsDiv.className = "box muted";
         jobsDiv.textContent = "No jobs yet.";
@@ -208,197 +219,16 @@
 
       jobsDiv.className = "box muted";
       jobsDiv.innerHTML = data.map(j => `
-        <div class="card">
-          <div><b>${esc(j.job_no)}</b> <span class="muted">(${esc(j.job_id)})</span></div>
-          <div class="muted">Branch: ${esc(j.branch_code)} | Status: ${esc(j.status)} | ${esc(j.created_at)}</div>
-          <hr/>
-
-          <div class="row">
-            <input id="to_${esc(j.job_id)}" class="small" value="MY-KUL" placeholder="Assign to branch"/>
-            <button onclick="assignJob('${esc(j.job_id)}')">Assign</button>
-            <button onclick="acceptJob('${esc(j.job_id)}')">Accept</button>
-            <button onclick="rejectJob('${esc(j.job_id)}')">Reject</button>
-          </div>
-
-          <div class="row">
-            <input id="etype_${esc(j.job_id)}" class="small" value="UPDATE" placeholder="Event type"/>
-            <input id="edesc_${esc(j.job_id)}" value="Status update" placeholder="Event desc"/>
-            <button onclick="addEvent('${esc(j.job_id)}')">Add Event</button>
-            <button onclick="viewEvents('${esc(j.job_id)}')">View Events</button>
-          </div>
-
-          <div id="msg_${esc(j.job_id)}" class="muted"></div>
-          <div id="ev_${esc(j.job_id)}" class="muted"></div>
+        <div>
+          <b>${esc(j.job_no)}</b> | ${esc(j.branch_code)} | ${esc(j.status)}
+          <span class="muted">(${esc(j.created_at)})</span>
         </div>
       `).join("");
-    }
-
-    // =========================
-    // ASSIGNMENTS
-    // job_assignments: id uuid, job_id (FK -> jobs.job_id), from_branch, to_branch, status, assigned_at
-    // =========================
-    async function assignJob(job_id) {
-      if (!currentUser) return;
-
-      const from_branch = document.getElementById("branch_code").value.trim() || "SGP-HQ";
-      const to_branch = document.getElementById("to_" + job_id).value.trim();
-
-      const msgEl = document.getElementById("msg_" + job_id);
-      msgEl.className = "muted";
-      msgEl.textContent = "Assigning...";
-
-      const { error } = await sb.from("job_assignments").insert({
-        job_id, from_branch, to_branch, status: "PENDING"
-      });
-
-      if (error) {
-        msgEl.className = "err";
-        msgEl.textContent = "❌ Assign failed: " + error.message;
-        return;
-      }
-
-      // Update job status
-      await sb.from("jobs").update({ status: "ASSIGNED" }).eq("job_id", job_id);
-
-      // Event
-      await sb.from("job_events").insert({
-        job_id, event_type: "ASSIGNED", event_desc: `Assigned from ${from_branch} to ${to_branch}`
-      });
-
-      msgEl.className = "ok";
-      msgEl.textContent = "✅ Assigned (PENDING) to " + to_branch;
-      await loadJobs();
-    }
-
-    async function acceptJob(job_id) {
-      const msgEl = document.getElementById("msg_" + job_id);
-      msgEl.className = "muted";
-      msgEl.textContent = "Accepting...";
-
-      const { data, error } = await sb
-        .from("job_assignments")
-        .select("id,to_branch,status")
-        .eq("job_id", job_id)
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-
-      if (error || !data || data.length === 0) {
-        msgEl.className = "err";
-        msgEl.textContent = "❌ No assignment to accept.";
-        return;
-      }
-
-      const a = data[0];
-      const { error: updErr } = await sb.from("job_assignments").update({ status: "ACCEPTED" }).eq("id", a.id);
-      if (updErr) {
-        msgEl.className = "err";
-        msgEl.textContent = "❌ Accept failed: " + updErr.message;
-        return;
-      }
-
-      await sb.from("jobs").update({ status: "ACCEPTED", branch_code: a.to_branch }).eq("job_id", job_id);
-      await sb.from("job_events").insert({ job_id, event_type: "ACCEPTED", event_desc: "Accepted by " + a.to_branch });
-
-      msgEl.className = "ok";
-      msgEl.textContent = "✅ Accepted.";
-      await loadJobs();
-    }
-
-    async function rejectJob(job_id) {
-      const msgEl = document.getElementById("msg_" + job_id);
-      msgEl.className = "muted";
-      msgEl.textContent = "Rejecting...";
-
-      const { data, error } = await sb
-        .from("job_assignments")
-        .select("id,to_branch,status")
-        .eq("job_id", job_id)
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-
-      if (error || !data || data.length === 0) {
-        msgEl.className = "err";
-        msgEl.textContent = "❌ No assignment to reject.";
-        return;
-      }
-
-      const a = data[0];
-      const { error: updErr } = await sb.from("job_assignments").update({ status: "REJECTED" }).eq("id", a.id);
-      if (updErr) {
-        msgEl.className = "err";
-        msgEl.textContent = "❌ Reject failed: " + updErr.message;
-        return;
-      }
-
-      await sb.from("job_events").insert({ job_id, event_type: "REJECTED", event_desc: "Rejected by " + a.to_branch });
-
-      msgEl.className = "ok";
-      msgEl.textContent = "✅ Rejected.";
-    }
-
-    // =========================
-    // EVENTS
-    // job_events: id uuid, job_id (FK), event_type, event_desc, event_time
-    // =========================
-    async function addEvent(job_id) {
-      const type = document.getElementById("etype_" + job_id).value.trim() || "UPDATE";
-      const desc = document.getElementById("edesc_" + job_id).value.trim() || "Status update";
-
-      const el = document.getElementById("ev_" + job_id);
-      el.className = "muted";
-      el.textContent = "Adding event...";
-
-      const { error } = await sb.from("job_events").insert({ job_id, event_type: type, event_desc: desc });
-      if (error) {
-        el.className = "err";
-        el.textContent = "❌ Add event failed: " + error.message;
-        return;
-      }
-      el.className = "ok";
-      el.textContent = "✅ Event added.";
-    }
-
-    async function viewEvents(job_id) {
-      const el = document.getElementById("ev_" + job_id);
-      el.className = "muted";
-      el.textContent = "Loading events...";
-
-      const { data, error } = await sb
-        .from("job_events")
-        .select("event_time,event_type,event_desc")
-        .eq("job_id", job_id)
-        .order("event_time", { ascending: false })
-        .limit(20);
-
-      if (error) {
-        el.className = "err";
-        el.textContent = "❌ Load events failed: " + error.message;
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        el.className = "muted";
-        el.textContent = "No events.";
-        return;
-      }
-
-      el.className = "muted";
-      el.innerHTML = "<b>Events</b><br/>" + data.map(e =>
-        `[${esc(e.event_time)}] <b>${esc(e.event_type)}</b> — ${esc(e.event_desc)}`
-      ).join("<br/>");
     }
 
     // INIT
     restoreSession();
     sb.auth.onAuthStateChange(() => restoreSession());
-
-    // expose functions for inline onclick
-    window.assignJob = assignJob;
-    window.acceptJob = acceptJob;
-    window.rejectJob = rejectJob;
-    window.addEvent = addEvent;
-    window.viewEvents = viewEvents;
-
   </script>
 </body>
 </html>
