@@ -1,174 +1,72 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Freight PRD</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Freight PRD - Auth Smoke Test</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    input, button { margin: 6px 0; padding: 8px; width: 320px; max-width: 100%; }
-    button { width: auto; cursor: pointer; }
-    .msg { margin-top: 8px; padding: 10px; border: 1px solid #eee; background: #fafafa; }
-    .ok { color: #0a7a0a; }
-    .err { color: #b00020; }
-    .muted { color: #666; }
-    hr { border: none; border-top: 1px solid #eee; margin: 18px 0; }
+    body{font-family:Arial;margin:24px}
+    input,button{padding:8px;margin:6px 0;width:340px;max-width:100%}
+    button{width:auto}
+    .box{padding:10px;border:1px solid #eee;background:#fafafa;margin-top:10px}
+    .ok{color:#0a7a0a} .err{color:#b00020} .muted{color:#666}
   </style>
 </head>
 <body>
+  <h2>Auth Smoke Test</h2>
 
-<h2>Login</h2>
-<input id="email" placeholder="Email" autocomplete="username" /><br>
-<input id="password" type="password" placeholder="Password" autocomplete="current-password" /><br>
-<button id="loginBtn">Login</button>
-<button id="logoutBtn">Logout</button>
+  <input id="email" placeholder="Email" autocomplete="username" />
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+  <div>
+    <button id="btnLogin">Login</button>
+    <button id="btnLogout">Logout</button>
+  </div>
 
-<div id="authMsg" class="msg muted">Waiting...</div>
+  <div id="msg" class="box muted">Ready.</div>
 
-<hr>
+  <!-- ✅ This MUST be a real script tag -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<h2>Create Job</h2>
-<input id="job_no" placeholder="Job No" /><br>
-<input id="branch_code" value="SGP-HQ" placeholder="Branch" /><br>
-<button id="createBtn">Create Job</button>
+  <script>
+    const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
-<div id="jobMsg" class="msg muted">No action yet.</div>
+    const msg = (t, cls="muted") => {
+      const el = document.getElementById("msg");
+      el.className = "box " + cls;
+      el.textContent = t;
+    };
 
-<hr>
-
-<h2>Jobs</h2>
-<div id="jobs" class="msg muted">No jobs loaded.</div>
-
-<!-- ✅ FIXED: Proper script tag -->
-https://unpkg.com/@supabase/supabase-js@2</script>
-
-<script>
-  // ✅ Your values (already injected)
-  const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
-
-  // Safety check
-  const authMsg = document.getElementById("authMsg");
-  const jobMsg = document.getElementById("jobMsg");
-  const jobsDiv = document.getElementById("jobs");
-
-  function setAuthMsg(text, cls="muted") {
-    authMsg.className = "msg " + cls;
-    authMsg.textContent = text;
-  }
-  function setJobMsg(text, cls="muted") {
-    jobMsg.className = "msg " + cls;
-    jobMsg.textContent = text;
-  }
-
-  if (!window.supabase) {
-    setAuthMsg("❌ Supabase library not loaded. Check internet/CDN blocked.", "err");
-    throw new Error("Supabase library not loaded.");
-  }
-
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  let currentUser = null;
-
-  document.getElementById("loginBtn").addEventListener("click", login);
-  document.getElementById("logoutBtn").addEventListener("click", logout);
-  document.getElementById("createBtn").addEventListener("click", createJob);
-
-  async function login() {
-    setAuthMsg("Logging in...", "muted");
-
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setAuthMsg("❌ Login failed: " + error.message, "err");
-      return;
+    // Fail fast if library didn't load
+    if (!window.supabase) {
+      msg("❌ Supabase JS not loaded. If you can see this, CDN is blocked OR file is not updated.", "err");
+      throw new Error("Supabase JS not loaded");
     }
 
-    currentUser = data.user;
-    setAuthMsg("✅ Logged in as " + currentUser.email + " | user_id: " + currentUser.id, "ok");
-    loadJobs();
-  }
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  async function logout() {
-    await supabase.auth.signOut();
-    currentUser = null;
-    setAuthMsg("Logged out.", "muted");
-  }
+    document.getElementById("btnLogin").onclick = async () => {
+      msg("Logging in...", "muted");
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
 
-  async function createJob() {
-    if (!currentUser) {
-      setJobMsg("❌ Login first.", "err");
-      return;
-    }
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) return msg("❌ Login failed: " + error.message, "err");
 
-    const job_no = document.getElementById("job_no").value.trim();
-    const branch_code = document.getElementById("branch_code").value.trim() || "SGP-HQ";
+      msg("✅ Logged in: " + data.user.email + " | " + data.user.id, "ok");
+    };
 
-    if (!job_no) {
-      setJobMsg("❌ Job No is required.", "err");
-      return;
-    }
+    document.getElementById("btnLogout").onclick = async () => {
+      await sb.auth.signOut();
+      msg("Logged out.", "muted");
+    };
 
-    setJobMsg("Creating job...", "muted");
-
-    const { error } = await supabase.from("jobs").insert({
-      job_no,
-      branch_code,
-      status: "CREATED",
-      created_by: currentUser.id
-    });
-
-    if (error) {
-      setJobMsg("❌ Create job failed: " + error.message, "err");
-      return;
-    }
-
-    setJobMsg("✅ Job created: " + job_no, "ok");
-    document.getElementById("job_no").value = "";
-    loadJobs();
-  }
-
-  async function loadJobs() {
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("job_no, branch_code, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      jobsDiv.className = "msg err";
-      jobsDiv.textContent = "❌ Load jobs failed: " + error.message;
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      jobsDiv.className = "msg muted";
-      jobsDiv.textContent = "No jobs yet.";
-      return;
-    }
-
-    jobsDiv.className = "msg muted";
-    jobsDiv.innerHTML = data.map(j =>
-      `<div><b>${j.job_no}</b> | ${j.branch_code} | ${j.status} <span class="muted">(${j.created_at})</span></div>`
-    ).join("");
-  }
-
-  // Auto restore session
-  (async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      currentUser = session.user;
-      setAuthMsg("✅ Session restored: " + currentUser.email, "ok");
-      loadJobs();
-    } else {
-      setAuthMsg("Not logged in.", "muted");
-    }
-  })();
-</script>
-
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session?.user) msg("✅ Session restored: " + session.user.email, "ok");
+      else msg("Not logged in.", "muted");
+    })();
+  </script>
 </body>
 </html>
 ``
