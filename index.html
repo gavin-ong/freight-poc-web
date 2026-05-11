@@ -1,110 +1,174 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Freight PRD</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    input, button { margin: 6px 0; padding: 8px; width: 320px; max-width: 100%; }
+    button { width: auto; cursor: pointer; }
+    .msg { margin-top: 8px; padding: 10px; border: 1px solid #eee; background: #fafafa; }
+    .ok { color: #0a7a0a; }
+    .err { color: #b00020; }
+    .muted { color: #666; }
+    hr { border: none; border-top: 1px solid #eee; margin: 18px 0; }
+  </style>
 </head>
 <body>
 
 <h2>Login</h2>
-<input id="email" placeholder="Email"><br>
-<input id="password" type="password" placeholder="Password"><br>
-<button onclick="login()">Login</button>
-<button onclick="logout()">Logout</button>
+<input id="email" placeholder="Email" autocomplete="username" /><br>
+<input id="password" type="password" placeholder="Password" autocomplete="current-password" /><br>
+<button id="loginBtn">Login</button>
+<button id="logoutBtn">Logout</button>
+
+<div id="authMsg" class="msg muted">Waiting...</div>
 
 <hr>
 
 <h2>Create Job</h2>
-<input id="job_no" placeholder="Job No"><br>
-<input id="branch_code" value="SGP-HQ" placeholder="Branch"><br>
+<input id="job_no" placeholder="Job No" /><br>
+<input id="branch_code" value="SGP-HQ" placeholder="Branch" /><br>
+<button id="createBtn">Create Job</button>
 
-<button onclick="createJob()">Create Job</button>
+<div id="jobMsg" class="msg muted">No action yet.</div>
 
 <hr>
 
 <h2>Jobs</h2>
-<div id="jobs"></div>
+<div id="jobs" class="msg muted">No jobs loaded.</div>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<!-- ✅ FIXED: Proper script tag -->
+https://unpkg.com/@supabase/supabase-js@2</script>
 
 <script>
-const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
-const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
+  // ✅ Your values (already injected)
+  const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // Safety check
+  const authMsg = document.getElementById("authMsg");
+  const jobMsg = document.getElementById("jobMsg");
+  const jobsDiv = document.getElementById("jobs");
 
-let currentUser = null;
-
-async function login() {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: document.getElementById("email").value,
-    password: document.getElementById("password").value
-  });
-
-  if (error) {
-    alert(error.message);
-    return;
+  function setAuthMsg(text, cls="muted") {
+    authMsg.className = "msg " + cls;
+    authMsg.textContent = text;
+  }
+  function setJobMsg(text, cls="muted") {
+    jobMsg.className = "msg " + cls;
+    jobMsg.textContent = text;
   }
 
-  currentUser = data.user;
-  alert("Logged in");
-  loadJobs();
-}
-
-async function logout() {
-  await supabase.auth.signOut();
-  currentUser = null;
-  alert("Logged out");
-}
-
-async function createJob() {
-  if (!currentUser) {
-    alert("Login first");
-    return;
+  if (!window.supabase) {
+    setAuthMsg("❌ Supabase library not loaded. Check internet/CDN blocked.", "err");
+    throw new Error("Supabase library not loaded.");
   }
 
-  const { error } = await supabase.from("jobs").insert({
-    job_no: document.getElementById("job_no").value,
-    branch_code: document.getElementById("branch_code").value,
-    status: "CREATED",
-    created_by: currentUser.id
-  });
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+  let currentUser = null;
 
-  alert("Job created");
-  loadJobs();
-}
+  document.getElementById("loginBtn").addEventListener("click", login);
+  document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById("createBtn").addEventListener("click", createJob);
 
-async function loadJobs() {
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .order("created_at", { ascending: false });
+  async function login() {
+    setAuthMsg("Logging in...", "muted");
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
 
-  document.getElementById("jobs").innerHTML =
-    data.map(j => `
-      <div>
-        ${j.job_no} | ${j.branch_code} | ${j.status}
-      </div>
-    `).join("");
-}
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-// auto load if session exists
-supabase.auth.getSession().then(res => {
-  if (res.data.session) {
-    currentUser = res.data.session.user;
+    if (error) {
+      setAuthMsg("❌ Login failed: " + error.message, "err");
+      return;
+    }
+
+    currentUser = data.user;
+    setAuthMsg("✅ Logged in as " + currentUser.email + " | user_id: " + currentUser.id, "ok");
     loadJobs();
   }
-});
+
+  async function logout() {
+    await supabase.auth.signOut();
+    currentUser = null;
+    setAuthMsg("Logged out.", "muted");
+  }
+
+  async function createJob() {
+    if (!currentUser) {
+      setJobMsg("❌ Login first.", "err");
+      return;
+    }
+
+    const job_no = document.getElementById("job_no").value.trim();
+    const branch_code = document.getElementById("branch_code").value.trim() || "SGP-HQ";
+
+    if (!job_no) {
+      setJobMsg("❌ Job No is required.", "err");
+      return;
+    }
+
+    setJobMsg("Creating job...", "muted");
+
+    const { error } = await supabase.from("jobs").insert({
+      job_no,
+      branch_code,
+      status: "CREATED",
+      created_by: currentUser.id
+    });
+
+    if (error) {
+      setJobMsg("❌ Create job failed: " + error.message, "err");
+      return;
+    }
+
+    setJobMsg("✅ Job created: " + job_no, "ok");
+    document.getElementById("job_no").value = "";
+    loadJobs();
+  }
+
+  async function loadJobs() {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("job_no, branch_code, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      jobsDiv.className = "msg err";
+      jobsDiv.textContent = "❌ Load jobs failed: " + error.message;
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      jobsDiv.className = "msg muted";
+      jobsDiv.textContent = "No jobs yet.";
+      return;
+    }
+
+    jobsDiv.className = "msg muted";
+    jobsDiv.innerHTML = data.map(j =>
+      `<div><b>${j.job_no}</b> | ${j.branch_code} | ${j.status} <span class="muted">(${j.created_at})</span></div>`
+    ).join("");
+  }
+
+  // Auto restore session
+  (async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      currentUser = session.user;
+      setAuthMsg("✅ Session restored: " + currentUser.email, "ok");
+      loadJobs();
+    } else {
+      setAuthMsg("Not logged in.", "muted");
+    }
+  })();
 </script>
 
 </body>
 </html>
+``
