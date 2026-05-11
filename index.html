@@ -14,26 +14,27 @@
     .ok { color:#0a7a0a; }
     .err { color:#b00020; }
     .muted { color:#666; }
-    .small { width: 180px; }
     hr { border:none; border-top:1px solid #eee; margin:18px 0; }
     code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
   </style>
 </head>
-<body>
 
+<body>
   <h2>Freight PRD</h2>
   <div class="muted">Jobs + Assignments + Events (Cargowise-like skeleton)</div>
 
-  <div id="status" class="box muted">Loading...</div>
+  <div id="status" class="box muted">Checking session…</div>
 
   <div class="card">
     <h3>Login</h3>
     <input id="email" placeholder="Email" autocomplete="username" />
     <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+
     <div class="row">
       <button id="btnLogin">Login</button>
       <button id="btnLogout">Logout</button>
     </div>
+
     <div id="authMsg" class="box muted">Ready.</div>
   </div>
 
@@ -51,35 +52,38 @@
         <option value="COMPLETED">COMPLETED</option>
         <option value="INVOICED">INVOICED</option>
       </select>
+
       <div class="row">
         <button id="btnCreateJob">Create Job</button>
         <button id="btnRefreshJobs">Refresh Jobs</button>
       </div>
+
       <div id="jobMsg" class="box muted">No action yet.</div>
     </div>
 
     <div class="card">
       <h3>Jobs</h3>
       <div class="muted">
-        Flow: Create job → Assign to branch → Accept/Reject → Add/View events.<br/>
-        Your PK is <code>jobs.job_id</code> (uuid).
+        Your PK is <code>jobs.job_id</code> (uuid).<br/>
+        If “No jobs loaded.” appears, it may be RLS (Step 3.3).
       </div>
       <div id="jobs" class="box muted">No jobs loaded.</div>
     </div>
   </div>
 
-  <!-- ✅ GUARANTEED correct script tag -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  <!-- ✅ DO NOT CHANGE THIS. Real script tag, not text -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2<script>
+    // =========================
+    // CONFIG (your values)
+    // =========================
     const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
     const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
     const statusBox = document.getElementById("status");
-    const authMsg = document.getElementById("authMsg");
-    const jobMsg  = document.getElementById("jobMsg");
-    const jobsDiv = document.getElementById("jobs");
-    const appDiv  = document.getElementById("app");
+    const authMsg   = document.getElementById("authMsg");
+    const jobMsg    = document.getElementById("jobMsg");
+    const jobsDiv   = document.getElementById("jobs");
+    const appDiv    = document.getElementById("app");
 
     const setStatus  = (t, cls="muted") => { statusBox.className = "box " + cls; statusBox.textContent = t; };
     const setAuthMsg = (t, cls="muted") => { authMsg.className   = "box " + cls; authMsg.textContent   = t; };
@@ -89,10 +93,10 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     }[m]));
 
-    // If this triggers, your CDN is blocked or script not loaded
+    // Fail fast if library didn't load
     if (!window.supabase) {
-      setStatus("❌ Supabase JS not loaded. CDN blocked or script failed.", "err");
-      setAuthMsg("❌ Supabase JS not loaded.", "err");
+      setStatus("❌ Supabase JS not loaded (CDN blocked).", "err");
+      setAuthMsg("❌ Supabase JS not loaded (CDN blocked).", "err");
       throw new Error("Supabase JS not loaded");
     }
 
@@ -104,14 +108,17 @@
     document.getElementById("btnCreateJob").onclick = createJob;
     document.getElementById("btnRefreshJobs").onclick = loadJobs;
 
-    // helper: timeout wrapper so "Logging in..." can’t hang forever
-    function withTimeout(promise, ms = 12000) {
+    // Helper: timeout, but we won't show scary red for restore-session timeouts
+    function withTimeout(promise, ms) {
       return Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout after " + ms + "ms")), ms))
       ]);
     }
 
+    // =========================
+    // AUTH
+    // =========================
     async function login() {
       setAuthMsg("Logging in...", "muted");
 
@@ -119,9 +126,10 @@
       const password = document.getElementById("password").value;
 
       try {
+        // Give login more time than restore
         const { data, error } = await withTimeout(
           sb.auth.signInWithPassword({ email, password }),
-          12000
+          20000
         );
 
         if (error) {
@@ -136,8 +144,8 @@
         appDiv.style.display = "block";
         await loadJobs();
       } catch (e) {
-        setAuthMsg("❌ Login stuck / failed: " + e.message, "err");
-        setStatus("Login failed.", "err");
+        setAuthMsg("❌ Login failed/stuck: " + e.message, "err");
+        setStatus("Not logged in.", "muted");
       }
     }
 
@@ -149,9 +157,13 @@
       setStatus("Not logged in.", "muted");
     }
 
+    // Session restore: do not show red if slow. Just ask user to login.
     async function restoreSession() {
+      setStatus("Checking session…", "muted");
+
       try {
-        const { data: { session } } = await withTimeout(sb.auth.getSession(), 8000);
+        const { data: { session } } = await withTimeout(sb.auth.getSession(), 20000);
+
         if (session?.user) {
           currentUser = session.user;
           setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
@@ -164,11 +176,16 @@
           appDiv.style.display = "none";
         }
       } catch (e) {
-        setAuthMsg("❌ Session restore failed: " + e.message, "err");
-        setStatus("❌ Session restore failed.", "err");
+        // non-fatal (NOT red)
+        setAuthMsg("Session check is slow on this network. Please login.", "muted");
+        setStatus("Not logged in.", "muted");
+        appDiv.style.display = "none";
       }
     }
 
+    // =========================
+    // JOBS (your schema)
+    // =========================
     async function createJob() {
       if (!currentUser) return setJobMsg("❌ Login first.", "err");
 
@@ -189,6 +206,7 @@
       setJobMsg("✅ Job created: " + data[0].job_no + " | job_id=" + data[0].job_id, "ok");
       document.getElementById("job_no").value = "";
 
+      // event
       await sb.from("job_events").insert({
         job_id: data[0].job_id,
         event_type: "CREATED",
