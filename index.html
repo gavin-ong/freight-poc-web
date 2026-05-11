@@ -1,409 +1,110 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Freight PRD POC</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    input, select, button { margin: 6px 0; padding: 8px; width: 320px; max-width: 100%; }
-    button { width: auto; cursor: pointer; }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; }
-    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 12px 0; }
-    .muted { color: #666; font-size: 12px; }
-    .danger { color: #b00020; }
-    .ok { color: #0a7a0a; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    .small { width: 160px; }
-    hr { border: none; border-top: 1px solid #eee; margin: 18px 0; }
-    pre { background: #fafafa; padding: 10px; border: 1px solid #eee; border-radius: 6px; overflow:auto; }
-  </style>
+  <title>Freight PRD</title>
 </head>
 <body>
 
-  <h2>Freight PRD POC</h2>
-  <div class="muted">Step 3.2: Job + Assignment + Events (Cargowise-style skeleton)</div>
+<h2>Login</h2>
+<input id="email" placeholder="Email"><br>
+<input id="password" type="password" placeholder="Password"><br>
+<button onclick="login()">Login</button>
+<button onclick="logout()">Logout</button>
 
-  <div id="status" class="card muted">Loading...</div>
+<hr>
 
-  <div id="authCard" class="card">
-    <h3>Login</h3>
-    <input id="email" placeholder="Email" autocomplete="username" />
-    <input id="password" placeholder="Password" type="password" autocomplete="current-password" />
-    <div class="row">
-      <button onclick="login()">Login</button>
-      <button onclick="logout()">Logout</button>
-    </div>
-    <div id="authMsg" class="muted"></div>
-  </div>
+<h2>Create Job</h2>
+<input id="job_no" placeholder="Job No"><br>
+<input id="branch_code" value="SGP-HQ" placeholder="Branch"><br>
 
-  <div id="app" style="display:none;">
-    <hr>
+<button onclick="createJob()">Create Job</button>
 
-    <div class="card">
-      <h3>Create Job</h3>
-      <input id="job_no" placeholder="Job No (unique)" />
-      <input id="branch_code" placeholder="Branch Code (e.g. SGP-HQ)" value="SGP-HQ" />
-      <select id="job_status">
-        <option value="CREATED">CREATED</option>
-        <option value="ASSIGNED">ASSIGNED</option>
-        <option value="ACCEPTED">ACCEPTED</option>
-        <option value="IN-TRANSIT">IN-TRANSIT</option>
-        <option value="ARRIVED">ARRIVED</option>
-        <option value="COMPLETED">COMPLETED</option>
-        <option value="INVOICED">INVOICED</option>
-      </select>
-      <div class="row">
-        <button onclick="createJob()">Create Job</button>
-        <button onclick="loadJobs()">Refresh Jobs</button>
+<hr>
+
+<h2>Jobs</h2>
+<div id="jobs"></div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+
+async function login() {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: document.getElementById("email").value,
+    password: document.getElementById("password").value
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  currentUser = data.user;
+  alert("Logged in");
+  loadJobs();
+}
+
+async function logout() {
+  await supabase.auth.signOut();
+  currentUser = null;
+  alert("Logged out");
+}
+
+async function createJob() {
+  if (!currentUser) {
+    alert("Login first");
+    return;
+  }
+
+  const { error } = await supabase.from("jobs").insert({
+    job_no: document.getElementById("job_no").value,
+    branch_code: document.getElementById("branch_code").value,
+    status: "CREATED",
+    created_by: currentUser.id
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  alert("Job created");
+  loadJobs();
+}
+
+async function loadJobs() {
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  document.getElementById("jobs").innerHTML =
+    data.map(j => `
+      <div>
+        ${j.job_no} | ${j.branch_code} | ${j.status}
       </div>
-      <div id="jobMsg" class="muted"></div>
-    </div>
+    `).join("");
+}
 
-    <div class="card">
-      <h3>Jobs</h3>
-      <div class="muted">Tip: After creating a job, click “Assign to Branch”, then “Accept/Reject”. Add Events to simulate job lifecycle.</div>
-      <div id="jobs" class="grid"></div>
-    </div>
-  </div>
-
-  <!-- Supabase JS (UMD build) -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-  <script>
-    // =========================
-    // 1) CONFIG — EDIT THESE
-    // =========================
-    const SUPABASE_URL = "YOUR_SUPABASE_URL";
-    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // anon/public key, not service role
-
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // =========================
-    // 2) UI HELPERS
-    // =========================
-    function setStatus(msg, cls="muted") {
-      const el = document.getElementById("status");
-      el.className = "card " + cls;
-      el.textContent = msg;
-    }
-
-    function setMsg(id, msg, cls="muted") {
-      const el = document.getElementById(id);
-      el.className = cls;
-      el.textContent = msg;
-    }
-
-    function esc(s) {
-      return (s ?? "").toString().replace(/[&<>"']/g, m => ({
-        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-      }[m]));
-    }
-
-    // =========================
-    // 3) AUTH
-    // =========================
-    async function login() {
-      setMsg("authMsg", "Logging in...");
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
-
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setMsg("authMsg", "Login failed: " + error.message, "danger");
-        return;
-      }
-      setMsg("authMsg", "Logged in.", "ok");
-      await refreshSessionUI();
-    }
-
-    async function logout() {
-      await supabase.auth.signOut();
-      setMsg("authMsg", "Logged out.", "muted");
-      await refreshSessionUI();
-    }
-
-    async function refreshSessionUI() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        document.getElementById("app").style.display = "none";
-        setStatus("Not logged in. Please login.", "muted");
-        return;
-      }
-      document.getElementById("app").style.display = "block";
-      setStatus("Logged in as: " + session.user.email + " | user_id: " + session.user.id, "ok");
-      await loadJobs();
-    }
-
-    // =========================
-    // 4) JOBS
-    // =========================
-    async function createJob() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setMsg("jobMsg", "You are not logged in.", "danger");
-        return;
-      }
-
-      const job_no = document.getElementById("job_no").value.trim();
-      const branch_code = document.getElementById("branch_code").value.trim();
-      const status = document.getElementById("job_status").value;
-
-      if (!job_no) {
-        setMsg("jobMsg", "Job No is required.", "danger");
-        return;
-      }
-
-      setMsg("jobMsg", "Creating job...");
-
-      // Insert into your existing schema
-      const payload = {
-        job_no,
-        branch_code,
-        status,
-        created_by: session.user.id
-      };
-
-      const { data, error } = await supabase
-        .from("jobs")
-        .insert(payload)
-        .select();
-
-      if (error) {
-        setMsg("jobMsg", "Create job failed: " + error.message, "danger");
-        return;
-      }
-
-      setMsg("jobMsg", "Job created: " + data[0].job_no + " (job_id=" + data[0].job_id + ")", "ok");
-
-      // Add an event automatically
-      await addEvent(data[0].job_id, "CREATED", "Job created by " + session.user.email);
-
-      document.getElementById("job_no").value = "";
-      await loadJobs();
-    }
-
-    async function loadJobs() {
-      setMsg("jobMsg", "Loading jobs...");
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("job_id, job_no, branch_code, status, created_by, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (error) {
-        setMsg("jobMsg", "Load jobs failed: " + error.message, "danger");
-        return;
-      }
-
-      setMsg("jobMsg", "Loaded " + data.length + " jobs.", "muted");
-
-      const container = document.getElementById("jobs");
-      container.innerHTML = "";
-
-      for (const j of data) {
-        const card = document.createElement("div");
-        card.className = "card";
-
-        card.innerHTML = `
-          <div><b>${esc(j.job_no)}</b> <span class="muted">(job_id: ${esc(j.job_id)})</span></div>
-          <div class="muted">Branch: ${esc(j.branch_code || "")} | Status: ${esc(j.status || "")}</div>
-          <div class="muted">Created: ${esc(j.created_at || "")}</div>
-
-          <hr>
-
-          <div class="row">
-            <input id="assign_to_${esc(j.job_id)}" class="small" placeholder="Assign to (e.g. MY-KUL)" value="MY-KUL" />
-            <button onclick="assignJob('${esc(j.job_id)}')">Assign to Branch</button>
-            <button onclick="acceptAssignment('${esc(j.job_id)}')">Accept</button>
-            <button onclick="rejectAssignment('${esc(j.job_id)}')">Reject</button>
-          </div>
-
-          <div class="row">
-            <input id="evt_type_${esc(j.job_id)}" class="small" placeholder="Event Type" value="UPDATE" />
-            <input id="evt_desc_${esc(j.job_id)}" placeholder="Event Description" value="Status update" />
-            <button onclick="addEventFromUI('${esc(j.job_id)}')">Add Event</button>
-            <button onclick="loadEvents('${esc(j.job_id)}')">View Events</button>
-          </div>
-
-          <div id="assign_msg_${esc(j.job_id)}" class="muted"></div>
-          <div id="events_${esc(j.job_id)}" class="muted"></div>
-        `;
-
-        container.appendChild(card);
-      }
-    }
-
-    // =========================
-    // 5) ASSIGNMENTS (cross-branch)
-    // =========================
-    async function assignJob(job_id) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const from_branch = document.getElementById("branch_code").value.trim() || "SGP-HQ";
-      const to_branch = document.getElementById("assign_to_" + job_id).value.trim();
-
-      if (!to_branch) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "To-branch is required.";
-        return;
-      }
-
-      document.getElementById("assign_msg_" + job_id).className = "muted";
-      document.getElementById("assign_msg_" + job_id).textContent = "Assigning...";
-
-      const { error } = await supabase
-        .from("job_assignments")
-        .insert({
-          job_id,
-          from_branch,
-          to_branch,
-          status: "PENDING"
-        });
-
-      if (error) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "Assign failed: " + error.message;
-        return;
-      }
-
-      // Update job status to ASSIGNED
-      await supabase.from("jobs").update({ status: "ASSIGNED" }).eq("job_id", job_id);
-
-      await addEvent(job_id, "ASSIGNED", `Assigned from ${from_branch} to ${to_branch}`);
-
-      document.getElementById("assign_msg_" + job_id).className = "ok";
-      document.getElementById("assign_msg_" + job_id).textContent = `Assigned to ${to_branch} (PENDING).`;
-      await loadJobs();
-    }
-
-    async function acceptAssignment(job_id) {
-      // Accept the latest pending assignment for this job
-      const { data, error } = await supabase
-        .from("job_assignments")
-        .select("id, to_branch, status")
-        .eq("job_id", job_id)
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-
-      if (error || !data || data.length === 0) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "No assignment found to accept.";
-        return;
-      }
-
-      const a = data[0];
-      const { error: updErr } = await supabase
-        .from("job_assignments")
-        .update({ status: "ACCEPTED" })
-        .eq("id", a.id);
-
-      if (updErr) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "Accept failed: " + updErr.message;
-        return;
-      }
-
-      await supabase.from("jobs").update({ status: "ACCEPTED", branch_code: a.to_branch }).eq("job_id", job_id);
-      await addEvent(job_id, "ACCEPTED", `Assignment accepted by ${a.to_branch}`);
-
-      document.getElementById("assign_msg_" + job_id).className = "ok";
-      document.getElementById("assign_msg_" + job_id).textContent = "Accepted.";
-      await loadJobs();
-    }
-
-    async function rejectAssignment(job_id) {
-      const { data, error } = await supabase
-        .from("job_assignments")
-        .select("id, to_branch, status")
-        .eq("job_id", job_id)
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-
-      if (error || !data || data.length === 0) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "No assignment found to reject.";
-        return;
-      }
-
-      const a = data[0];
-      const { error: updErr } = await supabase
-        .from("job_assignments")
-        .update({ status: "REJECTED" })
-        .eq("id", a.id);
-
-      if (updErr) {
-        document.getElementById("assign_msg_" + job_id).className = "danger";
-        document.getElementById("assign_msg_" + job_id).textContent = "Reject failed: " + updErr.message;
-        return;
-      }
-
-      await addEvent(job_id, "REJECTED", `Assignment rejected by ${a.to_branch}`);
-
-      document.getElementById("assign_msg_" + job_id).className = "ok";
-      document.getElementById("assign_msg_" + job_id).textContent = "Rejected.";
-    }
-
-    // =========================
-    // 6) EVENTS
-    // =========================
-    async function addEvent(job_id, event_type, event_desc) {
-      await supabase.from("job_events").insert({ job_id, event_type, event_desc });
-    }
-
-    async function addEventFromUI(job_id) {
-      const type = document.getElementById("evt_type_" + job_id).value.trim() || "UPDATE";
-      const desc = document.getElementById("evt_desc_" + job_id).value.trim() || "Status update";
-
-      const { error } = await supabase
-        .from("job_events")
-        .insert({ job_id, event_type: type, event_desc: desc });
-
-      const el = document.getElementById("events_" + job_id);
-      if (error) {
-        el.className = "danger";
-        el.textContent = "Add event failed: " + error.message;
-        return;
-      }
-      el.className = "ok";
-      el.textContent = "Event added.";
-    }
-
-    async function loadEvents(job_id) {
-      const el = document.getElementById("events_" + job_id);
-      el.className = "muted";
-      el.textContent = "Loading events...";
-
-      const { data, error } = await supabase
-        .from("job_events")
-        .select("event_type, event_desc, event_time")
-        .eq("job_id", job_id)
-        .order("event_time", { ascending: false })
-        .limit(20);
-
-      if (error) {
-        el.className = "danger";
-        el.textContent = "Load events failed: " + error.message;
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        el.textContent = "No events.";
-        return;
-      }
-
-      el.innerHTML = "<div class='muted'><b>Events</b></div>" + data.map(e =>
-        `<div class="muted">[${esc(e.event_time)}] <b>${esc(e.event_type)}</b> — ${esc(e.event_desc)}</div>`
-      ).join("");
-    }
-
-    // =========================
-    // 7) INIT
-    // =========================
-    refreshSessionUI();
-    supabase.auth.onAuthStateChange(() => refreshSessionUI());
-  </script>
+// auto load if session exists
+supabase.auth.getSession().then(res => {
+  if (res.data.session) {
+    currentUser = res.data.session.user;
+    loadJobs();
+  }
+});
+</script>
 
 </body>
 </html>
