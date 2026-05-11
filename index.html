@@ -23,7 +23,7 @@
   <h2>Freight PRD</h2>
   <div class="muted">Jobs + Assignments + Events (Cargowise-like skeleton)</div>
 
-  <div id="status" class="box muted">Checking session…</div>
+  <div id="status" class="box muted">Not logged in.</div>
 
   <div class="card">
     <h3>Login</h3>
@@ -31,8 +31,8 @@
     <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
 
     <div class="row">
-      <button id="btnLogin">Login</button>
-      <button id="btnLogout">Logout</button>
+      <button id="btnLogin" type="button">Login</button>
+      <button id="btnLogout" type="button">Logout</button>
     </div>
 
     <div id="authMsg" class="box muted">Ready.</div>
@@ -54,8 +54,8 @@
       </select>
 
       <div class="row">
-        <button id="btnCreateJob">Create Job</button>
-        <button id="btnRefreshJobs">Refresh Jobs</button>
+        <button id="btnCreateJob" type="button">Create Job</button>
+        <button id="btnRefreshJobs" type="button">Refresh Jobs</button>
       </div>
 
       <div id="jobMsg" class="box muted">No action yet.</div>
@@ -63,19 +63,16 @@
 
     <div class="card">
       <h3>Jobs</h3>
-      <div class="muted">
-        Your PK is <code>jobs.job_id</code> (uuid).<br/>
-        If “No jobs loaded.” appears, it may be RLS (Step 3.3).
-      </div>
+      <div class="muted">Your PK is <code>jobs.job_id</code> (uuid).</div>
       <div id="jobs" class="box muted">No jobs loaded.</div>
     </div>
   </div>
 
-  <!-- ✅ DO NOT CHANGE THIS. Real script tag, not text -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2<script>
-    // =========================
-    // CONFIG (your values)
-    // =========================
+  <!-- ✅ Correct, real script tag -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // ===== CONFIG (your values already in) =====
     const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
     const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -84,6 +81,7 @@
     const jobMsg    = document.getElementById("jobMsg");
     const jobsDiv   = document.getElementById("jobs");
     const appDiv    = document.getElementById("app");
+    const btnLogin  = document.getElementById("btnLogin");
 
     const setStatus  = (t, cls="muted") => { statusBox.className = "box " + cls; statusBox.textContent = t; };
     const setAuthMsg = (t, cls="muted") => { authMsg.className   = "box " + cls; authMsg.textContent   = t; };
@@ -93,7 +91,13 @@
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
     }[m]));
 
-    // Fail fast if library didn't load
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout after " + ms + "ms")), ms))
+      ]);
+    }
+
     if (!window.supabase) {
       setStatus("❌ Supabase JS not loaded (CDN blocked).", "err");
       setAuthMsg("❌ Supabase JS not loaded (CDN blocked).", "err");
@@ -103,30 +107,21 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     let currentUser = null;
 
+    // ===== Button handlers (always respond immediately) =====
     document.getElementById("btnLogin").onclick = login;
     document.getElementById("btnLogout").onclick = logout;
     document.getElementById("btnCreateJob").onclick = createJob;
     document.getElementById("btnRefreshJobs").onclick = loadJobs;
 
-    // Helper: timeout, but we won't show scary red for restore-session timeouts
-    function withTimeout(promise, ms) {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout after " + ms + "ms")), ms))
-      ]);
-    }
-
-    // =========================
-    // AUTH
-    // =========================
     async function login() {
+      // Immediate UI response (so you never see “no action”)
       setAuthMsg("Logging in...", "muted");
+      btnLogin.disabled = true;
 
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
       try {
-        // Give login more time than restore
         const { data, error } = await withTimeout(
           sb.auth.signInWithPassword({ email, password }),
           20000
@@ -146,6 +141,8 @@
       } catch (e) {
         setAuthMsg("❌ Login failed/stuck: " + e.message, "err");
         setStatus("Not logged in.", "muted");
+      } finally {
+        btnLogin.disabled = false;
       }
     }
 
@@ -157,35 +154,27 @@
       setStatus("Not logged in.", "muted");
     }
 
-    // Session restore: do not show red if slow. Just ask user to login.
-    async function restoreSession() {
-      setStatus("Checking session…", "muted");
-
+    // ===== Session restore: background only, short, never scary =====
+    (async () => {
+      setStatus("Checking saved session (background)…", "muted");
       try {
-        const { data: { session } } = await withTimeout(sb.auth.getSession(), 20000);
-
+        const { data: { session } } = await withTimeout(sb.auth.getSession(), 5000);
         if (session?.user) {
           currentUser = session.user;
           setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
-          setStatus("Logged in (restored session).", "ok");
+          setStatus("Logged in (restored).", "ok");
           appDiv.style.display = "block";
           await loadJobs();
         } else {
-          setAuthMsg("Not logged in.", "muted");
           setStatus("Not logged in.", "muted");
-          appDiv.style.display = "none";
         }
-      } catch (e) {
-        // non-fatal (NOT red)
-        setAuthMsg("Session check is slow on this network. Please login.", "muted");
+      } catch {
+        // Quiet fallback
         setStatus("Not logged in.", "muted");
-        appDiv.style.display = "none";
       }
-    }
+    })();
 
-    // =========================
-    // JOBS (your schema)
-    // =========================
+    // ===== Jobs (your schema) =====
     async function createJob() {
       if (!currentUser) return setJobMsg("❌ Login first.", "err");
 
@@ -206,7 +195,6 @@
       setJobMsg("✅ Job created: " + data[0].job_no + " | job_id=" + data[0].job_id, "ok");
       document.getElementById("job_no").value = "";
 
-      // event
       await sb.from("job_events").insert({
         job_id: data[0].job_id,
         event_type: "CREATED",
@@ -243,10 +231,6 @@
         </div>
       `).join("");
     }
-
-    // INIT
-    restoreSession();
-    sb.auth.onAuthStateChange(() => restoreSession());
   </script>
 </body>
 </html>
