@@ -14,7 +14,6 @@
     .ok { color:#0a7a0a; }
     .err { color:#b00020; }
     .muted { color:#666; }
-    hr { border:none; border-top:1px solid #eee; margin:18px 0; }
     code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
   </style>
 </head>
@@ -23,18 +22,21 @@
   <h2>Freight PRD</h2>
   <div class="muted">Jobs + Assignments + Events (Cargowise-like skeleton)</div>
 
+  <!-- 🔥 If you don't see this exact version number after deploy, you're NOT on the latest file -->
+  <div class="box muted">
+    <b>APP_VERSION:</b> <code>2026-05-11_v7</code>
+  </div>
+
   <div id="status" class="box muted">Not logged in.</div>
 
   <div class="card">
     <h3>Login</h3>
     <input id="email" placeholder="Email" autocomplete="username" />
     <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
-
     <div class="row">
       <button id="btnLogin" type="button">Login</button>
       <button id="btnLogout" type="button">Logout</button>
     </div>
-
     <div id="authMsg" class="box muted">Ready.</div>
   </div>
 
@@ -52,12 +54,10 @@
         <option value="COMPLETED">COMPLETED</option>
         <option value="INVOICED">INVOICED</option>
       </select>
-
       <div class="row">
         <button id="btnCreateJob" type="button">Create Job</button>
         <button id="btnRefreshJobs" type="button">Refresh Jobs</button>
       </div>
-
       <div id="jobMsg" class="box muted">No action yet.</div>
     </div>
 
@@ -68,11 +68,10 @@
     </div>
   </div>
 
-  <!-- ✅ Correct, real script tag -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- ✅ GUARANTEED browser UMD build (gives window.supabase) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <script>
-    // ===== CONFIG (your values already in) =====
     const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
     const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -98,23 +97,23 @@
       ]);
     }
 
+    // Hard fail if CDN/library blocked
     if (!window.supabase) {
-      setStatus("❌ Supabase JS not loaded (CDN blocked).", "err");
-      setAuthMsg("❌ Supabase JS not loaded (CDN blocked).", "err");
+      setStatus("❌ Supabase JS not loaded. CDN blocked.", "err");
+      setAuthMsg("❌ Supabase JS not loaded. CDN blocked.", "err");
       throw new Error("Supabase JS not loaded");
     }
 
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     let currentUser = null;
 
-    // ===== Button handlers (always respond immediately) =====
     document.getElementById("btnLogin").onclick = login;
     document.getElementById("btnLogout").onclick = logout;
     document.getElementById("btnCreateJob").onclick = createJob;
     document.getElementById("btnRefreshJobs").onclick = loadJobs;
 
     async function login() {
-      // Immediate UI response (so you never see “no action”)
+      // ✅ you will ALWAYS see this change immediately if JS is actually running
       setAuthMsg("Logging in...", "muted");
       btnLogin.disabled = true;
 
@@ -154,35 +153,30 @@
       setStatus("Not logged in.", "muted");
     }
 
-    // ===== Session restore: background only, short, never scary =====
+    // Background restore (non-blocking)
     (async () => {
-      setStatus("Checking saved session (background)…", "muted");
       try {
         const { data: { session } } = await withTimeout(sb.auth.getSession(), 5000);
         if (session?.user) {
           currentUser = session.user;
-          setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
+          setAuthMsg("✅ Session restored: " + currentUser.email, "ok");
           setStatus("Logged in (restored).", "ok");
           appDiv.style.display = "block";
           await loadJobs();
-        } else {
-          setStatus("Not logged in.", "muted");
         }
       } catch {
-        // Quiet fallback
-        setStatus("Not logged in.", "muted");
+        // quiet
       }
     })();
 
-    // ===== Jobs (your schema) =====
     async function createJob() {
       if (!currentUser) return setJobMsg("❌ Login first.", "err");
 
       const job_no = document.getElementById("job_no").value.trim();
       const branch_code = document.getElementById("branch_code").value.trim() || "SGP-HQ";
       const status = document.getElementById("job_status").value;
-
       if (!job_no) return setJobMsg("❌ Job No required.", "err");
+
       setJobMsg("Creating job...", "muted");
 
       const { data, error } = await sb
@@ -192,15 +186,8 @@
 
       if (error) return setJobMsg("❌ Create job failed: " + error.message, "err");
 
-      setJobMsg("✅ Job created: " + data[0].job_no + " | job_id=" + data[0].job_id, "ok");
+      setJobMsg("✅ Job created: " + data[0].job_no, "ok");
       document.getElementById("job_no").value = "";
-
-      await sb.from("job_events").insert({
-        job_id: data[0].job_id,
-        event_type: "CREATED",
-        event_desc: "Job created by " + currentUser.email
-      });
-
       await loadJobs();
     }
 
@@ -225,8 +212,7 @@
 
       jobsDiv.className = "box muted";
       jobsDiv.innerHTML = data.map(j => `
-        <div>
-          <b>${esc(j.job_no)}</b> | ${esc(j.branch_code)} | ${esc(j.status)}
+        <div><b>${esc(j.job_no)}</b> | ${esc(j.branch_code)} | ${esc(j.status)}
           <span class="muted">(${esc(j.created_at)})</span>
         </div>
       `).join("");
@@ -234,3 +220,4 @@
   </script>
 </body>
 </html>
+``
