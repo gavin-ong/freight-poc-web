@@ -14,6 +14,8 @@
     .ok { color:#0a7a0a; }
     .err { color:#b00020; }
     .muted { color:#666; }
+    .small { width: 180px; }
+    hr { border:none; border-top:1px solid #eee; margin:18px 0; }
     code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
   </style>
 </head>
@@ -22,9 +24,8 @@
   <h2>Freight PRD</h2>
   <div class="muted">Jobs + Assignments + Events (Cargowise-like skeleton)</div>
 
-  <!-- 🔥 If you don't see this exact version number after deploy, you're NOT on the latest file -->
   <div class="box muted">
-    <b>APP_VERSION:</b> <code>2026-05-11_v7</code>
+    <b>APP_VERSION:</b> <code>2026-05-11_v8</code>
   </div>
 
   <div id="status" class="box muted">Not logged in.</div>
@@ -63,15 +64,19 @@
 
     <div class="card">
       <h3>Jobs</h3>
-      <div class="muted">Your PK is <code>jobs.job_id</code> (uuid).</div>
+      <div class="muted">
+        Flow: Create job → Assign → Accept/Reject → Add/View events<br/>
+        PK: <code>jobs.job_id</code> (uuid)
+      </div>
       <div id="jobs" class="box muted">No jobs loaded.</div>
     </div>
   </div>
 
-  <!-- ✅ GUARANTEED browser UMD build (gives window.supabase) -->
+  <!-- ✅ Guaranteed browser build -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <script>
+    // ===== CONFIG (your values) =====
     const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
     const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -97,7 +102,6 @@
       ]);
     }
 
-    // Hard fail if CDN/library blocked
     if (!window.supabase) {
       setStatus("❌ Supabase JS not loaded. CDN blocked.", "err");
       setAuthMsg("❌ Supabase JS not loaded. CDN blocked.", "err");
@@ -112,8 +116,8 @@
     document.getElementById("btnCreateJob").onclick = createJob;
     document.getElementById("btnRefreshJobs").onclick = loadJobs;
 
+    // ===== AUTH =====
     async function login() {
-      // ✅ you will ALWAYS see this change immediately if JS is actually running
       setAuthMsg("Logging in...", "muted");
       btnLogin.disabled = true;
 
@@ -153,22 +157,21 @@
       setStatus("Not logged in.", "muted");
     }
 
-    // Background restore (non-blocking)
+    // background restore (quiet)
     (async () => {
       try {
         const { data: { session } } = await withTimeout(sb.auth.getSession(), 5000);
         if (session?.user) {
           currentUser = session.user;
-          setAuthMsg("✅ Session restored: " + currentUser.email, "ok");
+          setAuthMsg("✅ Session restored: " + currentUser.email + " | " + currentUser.id, "ok");
           setStatus("Logged in (restored).", "ok");
           appDiv.style.display = "block";
           await loadJobs();
         }
-      } catch {
-        // quiet
-      }
+      } catch { /* quiet */ }
     })();
 
+    // ===== JOBS (your schema) =====
     async function createJob() {
       if (!currentUser) return setJobMsg("❌ Login first.", "err");
 
@@ -186,7 +189,14 @@
 
       if (error) return setJobMsg("❌ Create job failed: " + error.message, "err");
 
-      setJobMsg("✅ Job created: " + data[0].job_no, "ok");
+      // auto event
+      await sb.from("job_events").insert({
+        job_id: data[0].job_id,
+        event_type: "CREATED",
+        event_desc: "Job created by " + currentUser.email
+      });
+
+      setJobMsg("✅ Job created: " + data[0].job_no + " | job_id=" + data[0].job_id, "ok");
       document.getElementById("job_no").value = "";
       await loadJobs();
     }
@@ -212,11 +222,181 @@
 
       jobsDiv.className = "box muted";
       jobsDiv.innerHTML = data.map(j => `
-        <div><b>${esc(j.job_no)}</b> | ${esc(j.branch_code)} | ${esc(j.status)}
-          <span class="muted">(${esc(j.created_at)})</span>
+        <div class="card">
+          <div><b>${esc(j.job_no)}</b> <span class="muted">(${esc(j.job_id)})</span></div>
+          <div class="muted">Branch: ${esc(j.branch_code)} | Status: ${esc(j.status)} | ${esc(j.created_at)}</div>
+          <hr/>
+
+          <div class="row">
+            <input id="to_${esc(j.job_id)}" class="small" value="MY-KUL" placeholder="Assign to branch"/>
+            <button onclick="assignJob('${esc(j.job_id)}')">Assign</button>
+            <button onclick="acceptJob('${esc(j.job_id)}')">Accept</button>
+            <button onclick="rejectJob('${esc(j.job_id)}')">Reject</button>
+          </div>
+
+          <div class="row">
+            <input id="etype_${esc(j.job_id)}" class="small" value="UPDATE" placeholder="Event type"/>
+            <input id="edesc_${esc(j.job_id)}" value="Status update" placeholder="Event desc"/>
+            <button onclick="addEvent('${esc(j.job_id)}')">Add Event</button>
+            <button onclick="viewEvents('${esc(j.job_id)}')">View Events</button>
+          </div>
+
+          <div id="msg_${esc(j.job_id)}" class="muted"></div>
+          <div id="ev_${esc(j.job_id)}" class="muted"></div>
         </div>
       `).join("");
     }
+
+    // ===== ASSIGNMENTS =====
+    async function assignJob(job_id) {
+      if (!currentUser) return;
+      const from_branch = document.getElementById("branch_code").value.trim() || "SGP-HQ";
+      const to_branch = document.getElementById("to_" + job_id).value.trim();
+
+      const msgEl = document.getElementById("msg_" + job_id);
+      msgEl.className = "muted";
+      msgEl.textContent = "Assigning...";
+
+      const { error } = await sb.from("job_assignments").insert({
+        job_id, from_branch, to_branch, status: "PENDING"
+      });
+
+      if (error) {
+        msgEl.className = "err";
+        msgEl.textContent = "❌ Assign failed: " + error.message;
+        return;
+      }
+
+      await sb.from("jobs").update({ status: "ASSIGNED" }).eq("job_id", job_id);
+      await sb.from("job_events").insert({
+        job_id, event_type: "ASSIGNED", event_desc: `Assigned from ${from_branch} to ${to_branch}`
+      });
+
+      msgEl.className = "ok";
+      msgEl.textContent = "✅ Assigned (PENDING) to " + to_branch;
+      await loadJobs();
+    }
+
+    async function acceptJob(job_id) {
+      const msgEl = document.getElementById("msg_" + job_id);
+      msgEl.className = "muted";
+      msgEl.textContent = "Accepting...";
+
+      const { data, error } = await sb
+        .from("job_assignments")
+        .select("id,to_branch")
+        .eq("job_id", job_id)
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+
+      if (error || !data || data.length === 0) {
+        msgEl.className = "err";
+        msgEl.textContent = "❌ No assignment to accept.";
+        return;
+      }
+
+      const a = data[0];
+      const { error: updErr } = await sb.from("job_assignments").update({ status: "ACCEPTED" }).eq("id", a.id);
+      if (updErr) {
+        msgEl.className = "err";
+        msgEl.textContent = "❌ Accept failed: " + updErr.message;
+        return;
+      }
+
+      await sb.from("jobs").update({ status: "ACCEPTED", branch_code: a.to_branch }).eq("job_id", job_id);
+      await sb.from("job_events").insert({ job_id, event_type: "ACCEPTED", event_desc: "Accepted by " + a.to_branch });
+
+      msgEl.className = "ok";
+      msgEl.textContent = "✅ Accepted.";
+      await loadJobs();
+    }
+
+    async function rejectJob(job_id) {
+      const msgEl = document.getElementById("msg_" + job_id);
+      msgEl.className = "muted";
+      msgEl.textContent = "Rejecting...";
+
+      const { data, error } = await sb
+        .from("job_assignments")
+        .select("id,to_branch")
+        .eq("job_id", job_id)
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+
+      if (error || !data || data.length === 0) {
+        msgEl.className = "err";
+        msgEl.textContent = "❌ No assignment to reject.";
+        return;
+      }
+
+      const a = data[0];
+      const { error: updErr } = await sb.from("job_assignments").update({ status: "REJECTED" }).eq("id", a.id);
+      if (updErr) {
+        msgEl.className = "err";
+        msgEl.textContent = "❌ Reject failed: " + updErr.message;
+        return;
+      }
+
+      await sb.from("job_events").insert({ job_id, event_type: "REJECTED", event_desc: "Rejected by " + a.to_branch });
+      msgEl.className = "ok";
+      msgEl.textContent = "✅ Rejected.";
+    }
+
+    // ===== EVENTS =====
+    async function addEvent(job_id) {
+      const type = document.getElementById("etype_" + job_id).value.trim() || "UPDATE";
+      const desc = document.getElementById("edesc_" + job_id).value.trim() || "Status update";
+
+      const el = document.getElementById("ev_" + job_id);
+      el.className = "muted";
+      el.textContent = "Adding event...";
+
+      const { error } = await sb.from("job_events").insert({ job_id, event_type: type, event_desc: desc });
+      if (error) {
+        el.className = "err";
+        el.textContent = "❌ Add event failed: " + error.message;
+        return;
+      }
+      el.className = "ok";
+      el.textContent = "✅ Event added.";
+    }
+
+    async function viewEvents(job_id) {
+      const el = document.getElementById("ev_" + job_id);
+      el.className = "muted";
+      el.textContent = "Loading events...";
+
+      const { data, error } = await sb
+        .from("job_events")
+        .select("event_time,event_type,event_desc")
+        .eq("job_id", job_id)
+        .order("event_time", { ascending: false })
+        .limit(20);
+
+      if (error) {
+        el.className = "err";
+        el.textContent = "❌ Load events failed: " + error.message;
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        el.className = "muted";
+        el.textContent = "No events.";
+        return;
+      }
+
+      el.className = "muted";
+      el.innerHTML = "<b>Events</b><br/>" + data.map(e =>
+        `[${esc(e.event_time)}] <b>${esc(e.event_type)}</b> — ${esc(e.event_desc)}`
+      ).join("<br/>");
+    }
+
+    // expose for inline onclick
+    window.assignJob = assignJob;
+    window.acceptJob = acceptJob;
+    window.rejectJob = rejectJob;
+    window.addEvent = addEvent;
+    window.viewEvents = viewEvents;
   </script>
 </body>
 </html>
