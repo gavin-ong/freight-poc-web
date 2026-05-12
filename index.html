@@ -5,21 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <!-- Supabase JS -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js  <style>
-    body { font-family: Arial, sans-serif; margin: 18px; }
-    input, select, button { margin: 6px 6px 6px 0; padding: 6px; }
-    hr { margin: 18px 0; }
-    .muted { color: #666; font-size: 12px; }
-  </style>
+  <!-- ✅ Correct Supabase script -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
   <h2>Login</h2>
-  <input id="email" placeholder="Email" autocomplete="username" />
-  <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+  <input id="email" placeholder="Email" />
+  <input id="password" type="password" placeholder="Password" />
   <button onclick="login()">Login</button>
-  <div id="loginStatus" class="muted"></div>
+  <div id="loginStatus"></div>
 
   <hr>
 
@@ -48,7 +43,7 @@
   <button onclick="loadJobs()">Refresh Jobs</button>
   <ul id="jobsList"></ul>
 
-  <!-- Force load the exact app.js you verified -->
-  <script src="/app.js?v=20260512b"></script>
+  <!-- ✅ THIS IS THE FIX -->
+  <script src="app.js?v=2"></script>
 </body>
 </html>
