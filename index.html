@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <style>
+  <!-- ✅ Correct Supabase script include -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js  <style>
     body { font-family: Arial, sans-serif; margin: 12px; }
     .top { margin-bottom: 10px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -164,6 +163,8 @@
     <div id="shipmentsArea" class="muted">Select a job to view shipments.</div>
   </div>
 
-  <script src="./app.js?v=shipments_full_20260512"></script>
+  <!-- ✅ IMPORTANT: new cache-buster so index.html definitely loads the newest JS -->
+  <script src="./app.js?v=shipments_dropdowns_fix_20260512b"></script>
 </body>
 </html>
+``
