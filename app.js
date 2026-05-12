@@ -21,7 +21,9 @@ function setStatus(msg) {
 
 async function pingSupabase() {
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      headers: { apikey: SUPABASE_ANON_KEY }
+    });
     if (!res.ok) { setStatus(`Supabase reachable but health check HTTP ${res.status}`); return false; }
     setStatus("Supabase reachable ✅");
     return true;
@@ -54,6 +56,26 @@ function setSelectDisabled(selectId, disabled, placeholderText) {
   sel.disabled = disabled;
 }
 
+// Resolve branch key for timezone lookup (production-robust)
+function resolveBranchKeyFromJob(job) {
+  if (!job) return null;
+
+  const candidates = [];
+
+  // 1) Most common in your system: branch_code might already be "SGSIN"
+  if (job.branch_code) candidates.push(String(job.branch_code).toUpperCase().trim());
+
+  // 2) If branch_code is only "SIN", then use country_code + branch_code
+  if (job.country_code && job.branch_code) {
+    candidates.push(`${String(job.country_code).toUpperCase().trim()}${String(job.branch_code).toUpperCase().trim()}`);
+  }
+
+  for (const k of candidates) {
+    if (k && branchMap[k]) return k;
+  }
+  return candidates[0] || null;
+}
+
 // ---------- BRANCHES ----------
 function populateBranchDropdown() {
   const ddl = $("branchKey");
@@ -75,11 +97,12 @@ function populateBranchDropdown() {
 async function loadBranchesFromDb() {
   const { data, error } = await client
     .from("branches")
-    .select("country_code, branch_code, branch_name, time_zone, is_active")
+    .select("branch_key, country_code, branch_code, branch_name, time_zone, is_active")
     .eq("is_active", true);
 
   if (error) {
     console.error("branches select failed:", error);
+    // fallback
     branchMap = {
       "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
       "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
@@ -92,22 +115,27 @@ async function loadBranchesFromDb() {
 
   const map = {};
   for (const b of data || []) {
-    const key = `${(b.country_code || "").toUpperCase()}${(b.branch_code || "").toUpperCase()}`;
+    // Production-grade: trust DB branch_key as the system key (your table already has it)
+    const key = (b.branch_key || `${(b.country_code || "").toUpperCase()}${(b.branch_code || "").toUpperCase()}`).toUpperCase().trim();
     map[key] = { name: b.branch_name || "", tz: b.time_zone || "Asia/Singapore" };
   }
+
   branchMap = map;
   populateBranchDropdown();
 }
 
+// Production-grade: read from user_profiles.default_branch_code (your real table)
 async function loadUserDefaultBranchKey() {
   if (!currentUser) return null;
+
   const { data, error } = await client
-    .from("profiles")
-    .select("default_branch_key")
-    .eq("id", currentUser.id)
+    .from("user_profiles")
+    .select("default_branch_code")
+    .eq("user_id", currentUser.id)
     .single();
+
   if (error) return null;
-  return (data?.default_branch_key || "").toUpperCase().trim() || null;
+  return (data?.default_branch_code || "").toUpperCase().trim() || null;
 }
 
 function applyDefaultBranch(defaultKey) {
@@ -120,12 +148,20 @@ function applyDefaultBranch(defaultKey) {
 }
 
 // ---------- JOBS ----------
+/**
+ * B4 (Production-grade):
+ * Query the VIEW jobs_list_vw (not raw jobs)
+ * so frontend stays consistent with branch enrichment + RLS.
+ */
 async function fetchJobs() {
   const { data, error } = await client
-    .from("jobs")
-    .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
+    .from("jobs_list_vw")
+    .select("*")
+    .order("country_code_from_branch", { ascending: true })
+    .order("branch_code", { ascending: true })
     .order("created_at", { ascending: false })
     .limit(50);
+
   if (error) throw error;
   return data || [];
 }
@@ -139,7 +175,10 @@ function populateJobDropdown(jobs) {
   for (const j of jobs) {
     const opt = document.createElement("option");
     opt.value = j.job_id;
-    opt.textContent = `${j.job_no} | ${j.customer_name || ""}`;
+    // Show more info = more production-grade
+    const branch = j.branch_code || "";
+    const cust = j.customer_name || "";
+    opt.textContent = `${j.job_no} | ${branch} | ${cust}`;
     ddl.appendChild(opt);
   }
   ddl.disabled = false;
@@ -150,7 +189,10 @@ function renderJobsList(jobs) {
   ul.innerHTML = "";
   for (const j of jobs) {
     const li = document.createElement("li");
-    li.innerHTML = `<b>${j.job_no}</b> | ${j.customer_name || ""}`;
+    const branch = j.branch_code || "";
+    const country = j.country_code_from_branch || j.country_code || "";
+    const bname = j.branch_name_from_branch || j.branch_branch_name || "";
+    li.innerHTML = `<b>${j.job_no}</b> | ${country} ${branch}${bname ? ` (${bname})` : ""} | ${j.customer_name || ""}`;
     ul.appendChild(li);
   }
 }
@@ -178,11 +220,13 @@ async function onJobChanged() {
     return;
   }
 
+  // Production-grade: read from jobs_list_vw for consistency and enriched fields
   const { data, error } = await client
-    .from("jobs")
-    .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
+    .from("jobs_list_vw")
+    .select("*")
     .eq("job_id", jobId)
     .single();
+
   if (error) return alert("Failed to load job: " + error.message);
 
   selectedJob = data;
@@ -230,6 +274,7 @@ async function fetchShipments(jobId) {
     .select("shipment_id, job_id, pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no, etd, eta, atd, ata, created_at")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
+
   if (error) throw error;
   return data || [];
 }
@@ -305,12 +350,13 @@ async function fetchEvents(shipmentId) {
     .select("event_id, shipment_id, event_code, event_name, event_time, location, remarks, created_at")
     .eq("shipment_id", shipmentId)
     .order("event_time", { ascending: true });
+
   if (error) throw error;
   return data || [];
 }
 
 /**
- * B2: Event time input is treated as the SELECTED JOB’s branch-local time.
+ * Event time input is treated as the SELECTED JOB’s branch-local time.
  * We send local string + branch tz to DB RPC add_shipment_event(),
  * DB converts to UTC correctly and triggers roll-up into shipments.* fields.
  */
@@ -319,17 +365,20 @@ async function addEvent() {
   if (!selectedShipmentId) return alert("Select a shipment first");
   if (!selectedJob) return alert("Select a job first");
 
-  const event_code = $("eventName").value;           // ETD/ETA/ATD/ATA...
-  const eventTimeLocal = $("eventTime").value;       // datetime-local string
+  const event_code = $("eventName").value;     // ETD/ETA/ATD/ATA...
+  const eventTimeLocal = $("eventTime").value; // datetime-local string
   const location = $("eventLocation").value.trim();
   const remarks = $("eventRemarks").value.trim();
 
   if (!eventTimeLocal) return alert("Select event time");
 
-  const branchKey = `${(selectedJob.country_code || "").toUpperCase()}${(selectedJob.branch_code || "").toUpperCase()}`;
-  const tz = branchMap[branchKey]?.tz || "Asia/Singapore";
+  const branchKey = resolveBranchKeyFromJob(selectedJob);
+  const tz =
+    (branchKey && branchMap[branchKey]?.tz) ||
+    selectedJob.time_zone_from_branch ||
+    selectedJob.branch_time_zone ||
+    "Asia/Singapore";
 
-  // ✅ Use DB RPC for branch-local time conversion + roll-up trigger
   const { error } = await client.rpc("add_shipment_event", {
     p_shipment_id: selectedShipmentId,
     p_event_code: event_code,
@@ -353,8 +402,12 @@ async function renderSelectedJobShipmentsArea() {
     return;
   }
 
-  const branchKey = `${(selectedJob.country_code || "").toUpperCase()}${(selectedJob.branch_code || "").toUpperCase()}`;
-  const tz = branchMap[branchKey]?.tz || "Asia/Singapore";
+  const branchKey = resolveBranchKeyFromJob(selectedJob);
+  const tz =
+    (branchKey && branchMap[branchKey]?.tz) ||
+    selectedJob.time_zone_from_branch ||
+    selectedJob.branch_time_zone ||
+    "Asia/Singapore";
 
   const shipments = await fetchShipments(selectedJob.job_id);
 
@@ -367,7 +420,6 @@ async function renderSelectedJobShipmentsArea() {
   html += `<ul>`;
 
   for (const s of shipments) {
-    // ✅ roll-up fields now available
     const etd = s.etd ? formatInTimezone(s.etd, tz) : "-";
     const eta = s.eta ? formatInTimezone(s.eta, tz) : "-";
     const atd = s.atd ? formatInTimezone(s.atd, tz) : "-";
