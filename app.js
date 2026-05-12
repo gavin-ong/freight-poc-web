@@ -162,7 +162,6 @@ async function reloadJobs() {
   populateJobDropdown(jobs);
   renderJobsList(jobs);
 
-  // auto-select first job
   $("jobSelect").selectedIndex = 0;
   await onJobChanged();
 }
@@ -228,7 +227,7 @@ async function createJob() {
 async function fetchShipments(jobId) {
   const { data, error } = await client
     .from("shipments")
-    .select("shipment_id, job_id, pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no, etd, eta, created_at")
+    .select("shipment_id, job_id, pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no, etd, eta, atd, ata, created_at")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -303,33 +302,42 @@ async function onShipmentChanged() {
 async function fetchEvents(shipmentId) {
   const { data, error } = await client
     .from("shipment_events")
-    .select("event_id, shipment_id, event_name, event_time, location, remarks, created_at")
+    .select("event_id, shipment_id, event_code, event_name, event_time, location, remarks, created_at")
     .eq("shipment_id", shipmentId)
     .order("event_time", { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
+/**
+ * B2: Event time input is treated as the SELECTED JOB’s branch-local time.
+ * We send local string + branch tz to DB RPC add_shipment_event(),
+ * DB converts to UTC correctly and triggers roll-up into shipments.* fields.
+ */
 async function addEvent() {
   if (!currentUser) return alert("Login first");
   if (!selectedShipmentId) return alert("Select a shipment first");
+  if (!selectedJob) return alert("Select a job first");
 
-  const event_name = $("eventName").value;
-  const eventTimeLocal = $("eventTime").value;
+  const event_code = $("eventName").value;           // ETD/ETA/ATD/ATA...
+  const eventTimeLocal = $("eventTime").value;       // datetime-local string
   const location = $("eventLocation").value.trim();
   const remarks = $("eventRemarks").value.trim();
 
   if (!eventTimeLocal) return alert("Select event time");
 
-  const event_time = new Date(eventTimeLocal).toISOString();
+  const branchKey = `${(selectedJob.country_code || "").toUpperCase()}${(selectedJob.branch_code || "").toUpperCase()}`;
+  const tz = branchMap[branchKey]?.tz || "Asia/Singapore";
 
-  const { error } = await client.from("shipment_events").insert([{
-    shipment_id: selectedShipmentId,
-    event_name,
-    event_time,
-    location,
-    remarks
-  }]);
+  // ✅ Use DB RPC for branch-local time conversion + roll-up trigger
+  const { error } = await client.rpc("add_shipment_event", {
+    p_shipment_id: selectedShipmentId,
+    p_event_code: event_code,
+    p_event_time_local: eventTimeLocal,
+    p_time_zone: tz,
+    p_location: location || null,
+    p_remarks: remarks || null
+  });
 
   if (error) return alert("Add event failed: " + error.message);
 
@@ -359,9 +367,16 @@ async function renderSelectedJobShipmentsArea() {
   html += `<ul>`;
 
   for (const s of shipments) {
+    // ✅ roll-up fields now available
+    const etd = s.etd ? formatInTimezone(s.etd, tz) : "-";
+    const eta = s.eta ? formatInTimezone(s.eta, tz) : "-";
+    const atd = s.atd ? formatInTimezone(s.atd, tz) : "-";
+    const ata = s.ata ? formatInTimezone(s.ata, tz) : "-";
+
     html += `<li>
       <b>${(s.pol || "")} → ${(s.pod || "")}</b> | ${(s.carrier || "")} | ${(s.vessel || "")} ${(s.voyage || "")}
       <div class="muted">Booking: ${(s.booking_no || "-")} | BL/AWB: ${(s.bl_awb_no || "-")}</div>
+      <div class="muted">ETD: ${etd} | ATD: ${atd} | ETA: ${eta} | ATA: ${ata}</div>
     `;
 
     const events = await fetchEvents(s.shipment_id);
@@ -371,7 +386,8 @@ async function renderSelectedJobShipmentsArea() {
       html += `<ul>`;
       for (const e of events) {
         const t = e.event_time ? formatInTimezone(e.event_time, tz) : "-";
-        html += `<li>${e.event_name} | ${t}${e.location ? " | " + e.location : ""}${e.remarks ? " | " + e.remarks : ""}</li>`;
+        const code = (e.event_code || e.event_name || "").toUpperCase();
+        html += `<li>${code} | ${t}${e.location ? " | " + e.location : ""}${e.remarks ? " | " + e.remarks : ""}</li>`;
       }
       html += `</ul>`;
     }
@@ -395,15 +411,12 @@ async function login() {
 
   currentUser = data.user;
 
-  // branches enabled
   setSelectDisabled("branchKey", true, "Loading branches...");
   await loadBranchesFromDb();
 
-  // apply default branch
   const defaultBranch = await loadUserDefaultBranchKey();
   applyDefaultBranch(defaultBranch);
 
-  // jobs enabled
   setSelectDisabled("jobSelect", true, "Loading jobs...");
   await reloadJobs();
 
@@ -413,7 +426,6 @@ async function login() {
 // ---------- WIRING ----------
 window.addEventListener("load", async () => {
   await pingSupabase();
-
   setSelectDisabled("branchKey", true, "Login to load branches...");
   setSelectDisabled("jobSelect", true, "Login to load jobs...");
   setSelectDisabled("shipmentSelect", true, "Select a job first...");
