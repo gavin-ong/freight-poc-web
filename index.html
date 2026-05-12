@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="enmeta charset="UTF-8" /><html lang="en">
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
@@ -13,6 +14,7 @@
     hr { margin: 18px 0; }
     .muted { color:#666; font-size:12px; }
     ul { margin-top:8px; }
+    code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
   </style>
 </head>
 
@@ -71,13 +73,10 @@
   <h2>Jobs List</h2>
   <div class="row">
     <button onclick="loadJobs()">Refresh Jobs</button>
-    <span class="muted">(shows latest 50)</span>
+    <span class="muted">Shows latest 50. Times displayed using the job’s branch timezone.</span>
   </div>
   <ul id="jobsList"></ul>
 
-  <!-- Load app.js (cache-busted) -->
-  <script src="app.js?v=20260512_1"></script>
+  <script src="/app.js?v=branch_tz_1"></script>
 </body>
 </html>
-
-<head>
