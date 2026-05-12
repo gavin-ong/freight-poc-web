@@ -13,6 +13,7 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+/** Health check */
 async function pingSupabase() {
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
@@ -31,6 +32,7 @@ async function pingSupabase() {
   }
 }
 
+/** Safe timezone formatter */
 function formatInTimezone(isoUtc, tz) {
   try {
     return new Date(isoUtc).toLocaleString("en-SG", {
@@ -48,62 +50,61 @@ function formatInTimezone(isoUtc, tz) {
   }
 }
 
-function setBranchDropdownLoading(msg, disabled = true) {
+function setBranchDropdownState(text, disabled = true) {
   const ddl = document.getElementById("branchKey");
   ddl.innerHTML = "";
   const opt = document.createElement("option");
-  opt.textContent = msg;
   opt.value = "";
+  opt.textContent = text;
   ddl.appendChild(opt);
   ddl.disabled = disabled;
 }
 
+/** Build dropdown from branchMap */
 function populateBranchDropdown() {
   const ddl = document.getElementById("branchKey");
   ddl.innerHTML = "";
 
-  // Sort keys (SGSIN, MYKUL, VNHCM...)
   const keys = Object.keys(branchMap).sort();
-
   if (keys.length === 0) {
-    setBranchDropdownLoading("No active branches found", true);
+    setBranchDropdownState("No active branches found", true);
     return;
   }
 
-  keys.forEach(k => {
-    const { name, tz } = branchMap[k];
+  for (const k of keys) {
+    const info = branchMap[k] || {};
     const opt = document.createElement("option");
     opt.value = k;
-    opt.textContent = name ? `${k} (${name})` : `${k}`;
-    opt.setAttribute("data-tz", tz || "");
+    opt.textContent = info.name ? `${k} (${info.name})` : k;
     ddl.appendChild(opt);
-  });
+  }
 
   ddl.disabled = false;
 }
 
+/** ✅ Load branches from DB (this is the KEY fix) */
 async function loadBranchesFromDb() {
-  // Requires authenticated if you later enforce RLS on branches.
   const { data, error } = await client
     .from("branches")
     .select("country_code, branch_code, branch_name, time_zone, is_active")
     .eq("is_active", true);
 
   if (error) {
-    console.error("Failed to load branches:", error);
+    console.error("Failed to load branches from DB:", error);
 
-    // Fallback so UI still works even if branches select is blocked
+    // Fallback (so app still usable even if branches select blocked)
     branchMap = {
       "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
       "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
       "VNHCM": { name: "Ho Chi Minh", tz: "Asia/Ho_Chi_Minh" }
     };
+
     populateBranchDropdown();
     return;
   }
 
   const map = {};
-  for (const b of data) {
+  for (const b of data || []) {
     const key = `${b.country_code || ""}${b.branch_code || ""}`;
     map[key] = {
       name: b.branch_name || "",
@@ -117,7 +118,7 @@ async function loadBranchesFromDb() {
 
 window.addEventListener("load", async () => {
   await pingSupabase();
-  setBranchDropdownLoading("Login to load branches…", true);
+  setBranchDropdownState("Login to load branches…", true);
 });
 
 // LOGIN
@@ -133,14 +134,15 @@ async function login() {
 
   currentUser = data.user;
 
-  setBranchDropdownLoading("Loading branches…", true);
+  // ✅ After login, load branches into dropdown
+  setBranchDropdownState("Loading branches…", true);
   await loadBranchesFromDb();
 
   alert("Login success: " + currentUser.email);
-  loadJobs();
+  await loadJobs();
 }
 
-// CREATE JOB
+// CREATE JOB (uses your DB RPC)
 async function createJob() {
   if (!currentUser) return alert("Login first");
 
@@ -156,7 +158,6 @@ async function createJob() {
   if (!branchKey) return alert("Please select branch");
   if (!customer || !origin || !destination) return alert("Please fill Customer / Origin / Destination");
 
-  // ✅ RPC generates job_no (and YYMM uses branch-local date in DB)
   const { data, error } = await client.rpc("create_job", {
     p_branch_key: branchKey,
     p_transport_mode: mode,
@@ -170,7 +171,7 @@ async function createJob() {
   if (error) return alert("Create job failed: " + error.message);
 
   alert("Job created: " + data.job_no);
-  loadJobs();
+  await loadJobs();
 }
 
 // LOAD JOBS
@@ -186,15 +187,16 @@ async function loadJobs() {
   const list = document.getElementById("jobsList");
   list.innerHTML = "";
 
-  data.forEach(job => {
-    const branchKey = `${job.country_code || ""}${job.branch_code || ""}`;
-    const tz = (branchMap[branchKey] && branchMap[branchKey].tz) ? branchMap[branchKey].tz : "Asia/Singapore";
+  for (const job of data || []) {
+    const bkey = `${job.country_code || ""}${job.branch_code || ""}`;
+    const tz = (branchMap[bkey] && branchMap[bkey].tz) ? branchMap[bkey].tz : "Asia/Singapore";
     const localTime = formatInTimezone(job.created_at, tz);
 
     const li = document.createElement("li");
     li.textContent =
       `${job.job_no} | ${job.customer_name} | ${job.origin_country} → ${job.destination_country} | ` +
       `${job.transport_mode}${job.job_type} | Created: ${localTime} (${tz})`;
+
     list.appendChild(li);
-  });
+  }
 }
