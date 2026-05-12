@@ -9,8 +9,8 @@ let currentUser = null;
 let branchMap = {};
 
 // current selection
-let selectedJob = null;        // jobs row
-let selectedShipmentId = null; // uuid
+let selectedJob = null;
+let selectedShipmentId = null;
 
 function $(id) { return document.getElementById(id); }
 
@@ -54,6 +54,7 @@ function setSelectDisabled(selectId, disabled, placeholderText) {
   sel.disabled = disabled;
 }
 
+// ---------- BRANCHES ----------
 function populateBranchDropdown() {
   const ddl = $("branchKey");
   ddl.innerHTML = "";
@@ -65,7 +66,7 @@ function populateBranchDropdown() {
     const info = branchMap[k] || {};
     const opt = document.createElement("option");
     opt.value = k;
-    opt.textContent = info.name ? `${k} (${info.name})` : k; // keep current style
+    opt.textContent = info.name ? `${k} (${info.name})` : k;
     ddl.appendChild(opt);
   }
   ddl.disabled = false;
@@ -79,7 +80,6 @@ async function loadBranchesFromDb() {
 
   if (error) {
     console.error("branches select failed:", error);
-    // fallback
     branchMap = {
       "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
       "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
@@ -106,10 +106,8 @@ async function loadUserDefaultBranchKey() {
     .select("default_branch_key")
     .eq("id", currentUser.id)
     .single();
-
   if (error) return null;
-  const key = (data?.default_branch_key || "").toUpperCase().trim();
-  return key || null;
+  return (data?.default_branch_key || "").toUpperCase().trim() || null;
 }
 
 function applyDefaultBranch(defaultKey) {
@@ -118,19 +116,16 @@ function applyDefaultBranch(defaultKey) {
   const target = (defaultKey || fallback).toUpperCase();
 
   const exists = Array.from(ddl.options).some(o => (o.value || "").toUpperCase() === target);
-  if (exists) ddl.value = target;
-  else ddl.value = fallback;
+  ddl.value = exists ? target : (Array.from(ddl.options).some(o => o.value === fallback) ? fallback : ddl.value);
 }
 
-// -------- JOBS --------
-
+// ---------- JOBS ----------
 async function fetchJobs() {
   const { data, error } = await client
     .from("jobs")
     .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
-
   if (error) throw error;
   return data || [];
 }
@@ -139,10 +134,7 @@ function populateJobDropdown(jobs) {
   const ddl = $("jobSelect");
   ddl.innerHTML = "";
 
-  if (!jobs.length) {
-    setSelectDisabled("jobSelect", true, "No jobs found");
-    return;
-  }
+  if (!jobs.length) return setSelectDisabled("jobSelect", true, "No jobs found");
 
   for (const j of jobs) {
     const opt = document.createElement("option");
@@ -156,7 +148,6 @@ function populateJobDropdown(jobs) {
 function renderJobsList(jobs) {
   const ul = $("jobsList");
   ul.innerHTML = "";
-
   for (const j of jobs) {
     const li = document.createElement("li");
     li.innerHTML = `<b>${j.job_no}</b> | ${j.customer_name || ""}`;
@@ -166,6 +157,7 @@ function renderJobsList(jobs) {
 
 async function reloadJobs() {
   if (!currentUser) return alert("Login first");
+
   const jobs = await fetchJobs();
   populateJobDropdown(jobs);
   renderJobsList(jobs);
@@ -175,10 +167,7 @@ async function reloadJobs() {
   await onJobChanged();
 }
 
-async function loadJobsList() {
-  // same as reloadJobs, keep button compatibility
-  return reloadJobs();
-}
+async function loadJobsList() { return reloadJobs(); }
 
 async function onJobChanged() {
   const jobId = $("jobSelect").value;
@@ -190,21 +179,20 @@ async function onJobChanged() {
     return;
   }
 
-  // fetch selected job row
   const { data, error } = await client
     .from("jobs")
     .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
     .eq("job_id", jobId)
     .single();
-
   if (error) return alert("Failed to load job: " + error.message);
 
   selectedJob = data;
+
   await reloadShipments();
   await renderSelectedJobShipmentsArea();
 }
 
-// -------- CREATE JOB (RPC) --------
+// ---------- CREATE JOB (RPC) ----------
 async function createJob() {
   if (!currentUser) return alert("Login first");
 
@@ -236,15 +224,13 @@ async function createJob() {
   await reloadJobs();
 }
 
-// -------- SHIPMENTS --------
-
+// ---------- SHIPMENTS ----------
 async function fetchShipments(jobId) {
   const { data, error } = await client
     .from("shipments")
     .select("shipment_id, job_id, pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no, etd, eta, created_at")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
-
   if (error) throw error;
   return data || [];
 }
@@ -262,13 +248,13 @@ function populateShipmentDropdown(shipments) {
   for (const s of shipments) {
     const opt = document.createElement("option");
     opt.value = s.shipment_id;
-    const lane = `${s.pol || ""}→${s.pod || ""}`.replace("→", " → ");
-    opt.textContent = `${lane} | ${s.carrier || ""} | ${s.booking_no || ""}`.trim();
+    const lane = `${s.pol || ""} → ${s.pod || ""}`.trim();
+    const label = `${lane} | ${s.carrier || ""} | ${s.booking_no || ""}`.trim();
+    opt.textContent = label;
     ddl.appendChild(opt);
   }
-  ddl.disabled = false;
 
-  // auto-select first
+  ddl.disabled = false;
   ddl.selectedIndex = 0;
   selectedShipmentId = ddl.value;
 }
@@ -313,15 +299,13 @@ async function onShipmentChanged() {
   await renderSelectedJobShipmentsArea();
 }
 
-// -------- EVENTS --------
-
+// ---------- EVENTS ----------
 async function fetchEvents(shipmentId) {
   const { data, error } = await client
     .from("shipment_events")
     .select("event_id, shipment_id, event_name, event_time, location, remarks, created_at")
     .eq("shipment_id", shipmentId)
     .order("event_time", { ascending: true });
-
   if (error) throw error;
   return data || [];
 }
@@ -331,14 +315,12 @@ async function addEvent() {
   if (!selectedShipmentId) return alert("Select a shipment first");
 
   const event_name = $("eventName").value;
-  const eventTimeLocal = $("eventTime").value; // datetime-local string
+  const eventTimeLocal = $("eventTime").value;
   const location = $("eventLocation").value.trim();
   const remarks = $("eventRemarks").value.trim();
 
   if (!eventTimeLocal) return alert("Select event time");
 
-  // Store as ISO; browser interprets datetime-local as local time (your PC time)
-  // Display layer will show in job branch timezone.
   const event_time = new Date(eventTimeLocal).toISOString();
 
   const { error } = await client.from("shipment_events").insert([{
@@ -355,7 +337,7 @@ async function addEvent() {
   await renderSelectedJobShipmentsArea();
 }
 
-// -------- RENDER SHIPMENTS + EVENTS AREA --------
+// ---------- RENDER SELECTED JOB SHIPMENTS ----------
 async function renderSelectedJobShipmentsArea() {
   const area = $("shipmentsArea");
   if (!selectedJob) {
@@ -389,11 +371,10 @@ async function renderSelectedJobShipmentsArea() {
       html += `<ul>`;
       for (const e of events) {
         const t = e.event_time ? formatInTimezone(e.event_time, tz) : "-";
-        html += `<li>${e.event_name} | ${t} ${e.location ? "| " + e.location : ""}${e.remarks ? " | " + e.remarks : ""}</li>`;
+        html += `<li>${e.event_name} | ${t}${e.location ? " | " + e.location : ""}${e.remarks ? " | " + e.remarks : ""}</li>`;
       }
       html += `</ul>`;
     }
-
     html += `</li>`;
   }
 
@@ -401,7 +382,7 @@ async function renderSelectedJobShipmentsArea() {
   area.innerHTML = html;
 }
 
-// -------- LOGIN --------
+// ---------- LOGIN ----------
 async function login() {
   const email = $("email").value.trim();
   const password = $("password").value;
@@ -414,24 +395,25 @@ async function login() {
 
   currentUser = data.user;
 
-  // Enable & load branches
+  // branches enabled
   setSelectDisabled("branchKey", true, "Loading branches...");
   await loadBranchesFromDb();
 
-  // Default to user's branch (profiles), fallback SGSIN
+  // apply default branch
   const defaultBranch = await loadUserDefaultBranchKey();
   applyDefaultBranch(defaultBranch);
 
-  // Load jobs into dropdown + list, enable job dropdown
+  // jobs enabled
   setSelectDisabled("jobSelect", true, "Loading jobs...");
   await reloadJobs();
 
   alert("Login success: " + currentUser.email);
 }
 
-// wiring
+// ---------- WIRING ----------
 window.addEventListener("load", async () => {
   await pingSupabase();
+
   setSelectDisabled("branchKey", true, "Login to load branches...");
   setSelectDisabled("jobSelect", true, "Login to load jobs...");
   setSelectDisabled("shipmentSelect", true, "Select a job first...");
