@@ -60,12 +60,27 @@ function setBranchDropdownState(text, disabled = true) {
   ddl.disabled = disabled;
 }
 
-/** Build dropdown from branchMap */
+/** ✅ Sort dropdown by Country+Branch (branch_key) */
 function populateBranchDropdown() {
   const ddl = document.getElementById("branchKey");
   ddl.innerHTML = "";
 
-  const keys = Object.keys(branchMap).sort();
+  // Sort by branch_key (Country+Branch) ASC
+  const keys = Object.keys(branchMap).sort((a, b) => {
+    // primary: branch_key
+    const ak = (a || "").toUpperCase();
+    const bk = (b || "").toUpperCase();
+    if (ak < bk) return -1;
+    if (ak > bk) return 1;
+
+    // secondary: branch_name
+    const an = (branchMap[a]?.name || "").toUpperCase();
+    const bn = (branchMap[b]?.name || "").toUpperCase();
+    if (an < bn) return -1;
+    if (an > bn) return 1;
+    return 0;
+  });
+
   if (keys.length === 0) {
     setBranchDropdownState("No active branches found", true);
     return;
@@ -82,7 +97,7 @@ function populateBranchDropdown() {
   ddl.disabled = false;
 }
 
-/** ✅ Load branches from DB (this is the KEY fix) */
+/** Load branches from DB */
 async function loadBranchesFromDb() {
   const { data, error } = await client
     .from("branches")
@@ -92,7 +107,7 @@ async function loadBranchesFromDb() {
   if (error) {
     console.error("Failed to load branches from DB:", error);
 
-    // Fallback (so app still usable even if branches select blocked)
+    // Fallback
     branchMap = {
       "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
       "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
@@ -105,7 +120,7 @@ async function loadBranchesFromDb() {
 
   const map = {};
   for (const b of data || []) {
-    const key = `${b.country_code || ""}${b.branch_code || ""}`;
+    const key = `${b.country_code || ""}${b.branch_code || ""}`.toUpperCase();
     map[key] = {
       name: b.branch_name || "",
       tz: b.time_zone || "Asia/Singapore"
@@ -134,7 +149,7 @@ async function login() {
 
   currentUser = data.user;
 
-  // ✅ After login, load branches into dropdown
+  // After login, load branches into dropdown (sorted)
   setBranchDropdownState("Loading branches…", true);
   await loadBranchesFromDb();
 
@@ -188,7 +203,7 @@ async function loadJobs() {
   list.innerHTML = "";
 
   for (const job of data || []) {
-    const bkey = `${job.country_code || ""}${job.branch_code || ""}`;
+    const bkey = `${job.country_code || ""}${job.branch_code || ""}`.toUpperCase();
     const tz = (branchMap[bkey] && branchMap[bkey].tz) ? branchMap[bkey].tz : "Asia/Singapore";
     const localTime = formatInTimezone(job.created_at, tz);
 
