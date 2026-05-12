@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <!-- Supabase JS -->
+  <!-- Supabase JS (must be a valid script tag) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
@@ -34,9 +34,9 @@
 
   <div class="row">
     <label>Branch</label>
-    <!-- ✅ Autoloaded from DB -->
+    <!-- ✅ Branches will be loaded from DB -->
     <select id="branchKey" disabled>
-      <option>Login to load branches…</option>
+      <option value="">Login to load branches…</option>
     </select>
 
     <label>Mode</label>
@@ -69,9 +69,9 @@
   </div>
 
   <div class="row muted">
-    <span class="pill">Branch dropdown is loaded from DB</span>
+    <span class="pill">Branch dropdown is loaded from DB (public.branches)</span>
     <span class="pill">Created time shown in branch timezone</span>
-    <span class="pill">YYMM counter follows branch-local date</span>
+    <span class="pill">YYMM counter follows branch-local date (DB)</span>
   </div>
 
   <hr />
@@ -83,7 +83,7 @@
   </div>
   <ul id="jobsList"></ul>
 
-  <!-- ✅ Cache-bust JS -->
-  <script src="/app.js?v=autoload_branches_1"></script>
+  <!-- ✅ Cache-bust JS to force Cloudflare/browser to fetch the newest version -->
+  <script src="./app.js?v=autoload_branches_fix_20260512"></script>
 </body>
 </html>
