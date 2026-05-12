@@ -1,165 +1,46 @@
--- =========================
--- STEP 3.3: RLS POLICIES (Creator-only)
--- =========================
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Freight POC</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
 
--- 0) Ensure RLS is ON
-alter table public.jobs enable row level security;
-alter table public.job_events enable row level security;
-alter table public.job_assignments enable row level security;
+<h2>Login</h2>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<button onclick="login()">Login</button>
 
--- 1) (Optional but recommended) Remove old policies to avoid conflicts
-drop policy if exists "jobs_select_own" on public.jobs;
-drop policy if exists "jobs_insert_own" on public.jobs;
-drop policy if exists "jobs_update_own" on public.jobs;
-drop policy if exists "jobs_delete_own" on public.jobs;
+<hr>
 
-drop policy if exists "job_events_select_own" on public.job_events;
-drop policy if exists "job_events_insert_own" on public.job_events;
-drop policy if exists "job_events_delete_own" on public.job_events;
+<h2>Create Job</h2>
 
-drop policy if exists "job_assignments_select_own" on public.job_assignments;
-drop policy if exists "job_assignments_insert_own" on public.job_assignments;
-drop policy if exists "job_assignments_update_own" on public.job_assignments;
-drop policy if exists "job_assignments_delete_own" on public.job_assignments;
+<input id="customer" placeholder="Customer Name">
+<input id="origin" placeholder="Origin Country">
+<input id="destination" placeholder="Destination Country">
 
--- =========================
--- JOBS (public.jobs)
--- =========================
+<select id="mode">
+  <option value="SEA">SEA</option>
+  <option value="AIR">AIR</option>
+  <option value="LAND">LAND</option>
+</select>
 
--- SELECT: user can see only jobs created by user
-create policy "jobs_select_own"
-on public.jobs
-for select
-to authenticated
-using (created_by = auth.uid());
+<select id="incoterm">
+  <option value="FOB">FOB</option>
+  <option value="CIF">CIF</option>
+  <option value="EXW">EXW</option>
+</select>
 
--- INSERT: user can create jobs only if created_by = auth.uid()
-create policy "jobs_insert_own"
-on public.jobs
-for insert
-to authenticated
-with check (created_by = auth.uid());
+<button onclick="createJob()">Create Job</button>
 
--- UPDATE: user can update only their own jobs
-create policy "jobs_update_own"
-on public.jobs
-for update
-to authenticated
-using (created_by = auth.uid())
-with check (created_by = auth.uid());
+<hr>
 
--- DELETE: user can delete only their own jobs
-create policy "jobs_delete_own"
-on public.jobs
-for delete
-to authenticated
-using (created_by = auth.uid());
+<h2>Jobs List</h2>
+<button onclick="loadJobs()">Refresh Jobs</button>
 
--- =========================
--- JOB EVENTS (public.job_events)
--- Only allow events for jobs the user created
--- =========================
+<ul id="jobsList"></ul>
 
-create policy "job_events_select_own"
-on public.job_events
-for select
-to authenticated
-using (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_events.job_id
-      and j.created_by = auth.uid()
-  )
-);
+<script src="app.js"></script>
 
-create policy "job_events_insert_own"
-on public.job_events
-for insert
-to authenticated
-with check (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_events.job_id
-      and j.created_by = auth.uid()
-  )
-);
-
-create policy "job_events_delete_own"
-on public.job_events
-for delete
-to authenticated
-using (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_events.job_id
-      and j.created_by = auth.uid()
-  )
-);
-
--- =========================
--- JOB ASSIGNMENTS (public.job_assignments)
--- Only allow assignments for jobs the user created
--- =========================
-
-create policy "job_assignments_select_own"
-on public.job_assignments
-for select
-to authenticated
-using (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_assignments.job_id
-      and j.created_by = auth.uid()
-  )
-);
-
-create policy "job_assignments_insert_own"
-on public.job_assignments
-for insert
-to authenticated
-with check (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_assignments.job_id
-      and j.created_by = auth.uid()
-  )
-);
-
-create policy "job_assignments_update_own"
-on public.job_assignments
-for update
-to authenticated
-using (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_assignments.job_id
-      and j.created_by = auth.uid()
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_assignments.job_id
-      and j.created_by = auth.uid()
-  )
-);
-
-create policy "job_assignments_delete_own"
-on public.job_assignments
-for delete
-to authenticated
-using (
-  exists (
-    select 1
-    from public.jobs j
-    where j.job_id = job_assignments.job_id
-      and j.created_by = auth.uid()
-  )
-);
+</body>
+</html>
