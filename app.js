@@ -1,4 +1,3 @@
-// KEEP YOUR EXISTING SUPABASE CONFIG
 const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
 
@@ -6,125 +5,437 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
 
-async function login() {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+// branch_key -> { name, tz }
+let branchMap = {};
 
-  const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (error) return alert(error.message);
+// current selection
+let selectedJob = null;        // jobs row
+let selectedShipmentId = null; // uuid
 
-  currentUser = data.user;
-  alert("Login success");
+function $(id) { return document.getElementById(id); }
 
-  loadJobs();
+function setStatus(msg) {
+  const el = $("loginStatus");
+  if (el) el.textContent = msg;
 }
 
-// ==========================
-// LOAD JOBS + SHIPMENTS
-// ==========================
-async function loadJobs() {
-  const { data: jobs } = await client.from("jobs")
-    .select("*")
+async function pingSupabase() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: SUPABASE_ANON_KEY } });
+    if (!res.ok) { setStatus(`Supabase reachable but health check HTTP ${res.status}`); return false; }
+    setStatus("Supabase reachable ✅");
+    return true;
+  } catch {
+    setStatus("Supabase NOT reachable ❌ (Failed to fetch)");
+    return false;
+  }
+}
+
+function formatInTimezone(isoUtc, tz) {
+  try {
+    return new Date(isoUtc).toLocaleString("en-SG", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false
+    });
+  } catch {
+    return new Date(isoUtc).toLocaleString("en-SG");
+  }
+}
+
+function setSelectDisabled(selectId, disabled, placeholderText) {
+  const sel = $(selectId);
+  sel.innerHTML = "";
+  const opt = document.createElement("option");
+  opt.value = "";
+  opt.textContent = placeholderText;
+  sel.appendChild(opt);
+  sel.disabled = disabled;
+}
+
+function populateBranchDropdown() {
+  const ddl = $("branchKey");
+  ddl.innerHTML = "";
+
+  const keys = Object.keys(branchMap).sort((a, b) => a.localeCompare(b)); // country+branch order
+  if (keys.length === 0) return setSelectDisabled("branchKey", true, "No active branches found");
+
+  for (const k of keys) {
+    const info = branchMap[k] || {};
+    const opt = document.createElement("option");
+    opt.value = k;
+    opt.textContent = info.name ? `${k} (${info.name})` : k; // keep current style
+    ddl.appendChild(opt);
+  }
+  ddl.disabled = false;
+}
+
+async function loadBranchesFromDb() {
+  const { data, error } = await client
+    .from("branches")
+    .select("country_code, branch_code, branch_name, time_zone, is_active")
+    .eq("is_active", true);
+
+  if (error) {
+    console.error("branches select failed:", error);
+    // fallback
+    branchMap = {
+      "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
+      "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
+      "VNHCM": { name: "Ho Chi Minh", tz: "Asia/Ho_Chi_Minh" },
+      "THBKK": { name: "Bangkok", tz: "Asia/Bangkok" }
+    };
+    populateBranchDropdown();
+    return;
+  }
+
+  const map = {};
+  for (const b of data || []) {
+    const key = `${(b.country_code || "").toUpperCase()}${(b.branch_code || "").toUpperCase()}`;
+    map[key] = { name: b.branch_name || "", tz: b.time_zone || "Asia/Singapore" };
+  }
+  branchMap = map;
+  populateBranchDropdown();
+}
+
+async function loadUserDefaultBranchKey() {
+  if (!currentUser) return null;
+  const { data, error } = await client
+    .from("profiles")
+    .select("default_branch_key")
+    .eq("id", currentUser.id)
+    .single();
+
+  if (error) return null;
+  const key = (data?.default_branch_key || "").toUpperCase().trim();
+  return key || null;
+}
+
+function applyDefaultBranch(defaultKey) {
+  const ddl = $("branchKey");
+  const fallback = "SGSIN";
+  const target = (defaultKey || fallback).toUpperCase();
+
+  const exists = Array.from(ddl.options).some(o => (o.value || "").toUpperCase() === target);
+  if (exists) ddl.value = target;
+  else ddl.value = fallback;
+}
+
+// -------- JOBS --------
+
+async function fetchJobs() {
+  const { data, error } = await client
+    .from("jobs")
+    .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return data || [];
+}
+
+function populateJobDropdown(jobs) {
+  const ddl = $("jobSelect");
+  ddl.innerHTML = "";
+
+  if (!jobs.length) {
+    setSelectDisabled("jobSelect", true, "No jobs found");
+    return;
+  }
+
+  for (const j of jobs) {
+    const opt = document.createElement("option");
+    opt.value = j.job_id;
+    opt.textContent = `${j.job_no} | ${j.customer_name || ""}`;
+    ddl.appendChild(opt);
+  }
+  ddl.disabled = false;
+}
+
+function renderJobsList(jobs) {
+  const ul = $("jobsList");
+  ul.innerHTML = "";
+
+  for (const j of jobs) {
+    const li = document.createElement("li");
+    li.innerHTML = `<b>${j.job_no}</b> | ${j.customer_name || ""}`;
+    ul.appendChild(li);
+  }
+}
+
+async function reloadJobs() {
+  if (!currentUser) return alert("Login first");
+  const jobs = await fetchJobs();
+  populateJobDropdown(jobs);
+  renderJobsList(jobs);
+
+  // auto-select first job
+  $("jobSelect").selectedIndex = 0;
+  await onJobChanged();
+}
+
+async function loadJobsList() {
+  // same as reloadJobs, keep button compatibility
+  return reloadJobs();
+}
+
+async function onJobChanged() {
+  const jobId = $("jobSelect").value;
+  if (!jobId) {
+    selectedJob = null;
+    selectedShipmentId = null;
+    setSelectDisabled("shipmentSelect", true, "Select a job first...");
+    $("shipmentsArea").textContent = "Select a job to view shipments.";
+    return;
+  }
+
+  // fetch selected job row
+  const { data, error } = await client
+    .from("jobs")
+    .select("job_id, job_no, customer_name, country_code, branch_code, created_at")
+    .eq("job_id", jobId)
+    .single();
+
+  if (error) return alert("Failed to load job: " + error.message);
+
+  selectedJob = data;
+  await reloadShipments();
+  await renderSelectedJobShipmentsArea();
+}
+
+// -------- CREATE JOB (RPC) --------
+async function createJob() {
+  if (!currentUser) return alert("Login first");
+
+  const branchKey = $("branchKey").value;
+  const mode = $("mode").value;
+  const jobType = $("jobType").value;
+  const incoterm = $("incoterm").value;
+
+  const customer = $("customer").value.trim();
+  const origin = $("origin").value.trim();
+  const destination = $("destination").value.trim();
+
+  if (!branchKey) return alert("Please select branch");
+  if (!customer || !origin || !destination) return alert("Please fill Customer / Origin / Destination");
+
+  const { data, error } = await client.rpc("create_job", {
+    p_branch_key: branchKey,
+    p_transport_mode: mode,
+    p_job_type: jobType,
+    p_customer_name: customer,
+    p_origin_country: origin,
+    p_destination_country: destination,
+    p_incoterm: incoterm
+  });
+
+  if (error) return alert("Create job failed: " + error.message);
+
+  alert("Job created: " + data.job_no);
+  await reloadJobs();
+}
+
+// -------- SHIPMENTS --------
+
+async function fetchShipments(jobId) {
+  const { data, error } = await client
+    .from("shipments")
+    .select("shipment_id, job_id, pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no, etd, eta, created_at")
+    .eq("job_id", jobId)
     .order("created_at", { ascending: false });
 
-  const list = document.getElementById("jobsList");
-  list.innerHTML = "";
-
-  for (const job of jobs) {
-    const li = document.createElement("li");
-
-    li.innerHTML = `
-      <b>${job.job_no}</b> | ${job.customer_name}
-      <button onclick="addShipment('${job.job_id}')">+ Shipment</button>
-      <ul id="ship-${job.job_id}"></ul>
-    `;
-
-    list.appendChild(li);
-
-    loadShipments(job.job_id);
-  }
+  if (error) throw error;
+  return data || [];
 }
 
-// ==========================
-// LOAD SHIPMENTS
-// ==========================
-async function loadShipments(job_id) {
-  const { data: shipments } = await client
-    .from("shipments")
-    .select("*")
-    .eq("job_id", job_id);
+function populateShipmentDropdown(shipments) {
+  const ddl = $("shipmentSelect");
+  ddl.innerHTML = "";
 
-  const ul = document.getElementById(`ship-${job_id}`);
-  ul.innerHTML = "";
+  if (!shipments.length) {
+    setSelectDisabled("shipmentSelect", true, "No shipments yet (create one)...");
+    selectedShipmentId = null;
+    return;
+  }
 
   for (const s of shipments) {
-    const li = document.createElement("li");
-
-    li.innerHTML = `
-      🚢 ${s.pol || ""} → ${s.pod || ""} | ${s.carrier || ""} 
-      <button onclick="addEvent('${s.shipment_id}')">+ Event</button>
-      <ul id="event-${s.shipment_id}"></ul>
-    `;
-
-    ul.appendChild(li);
-
-    loadEvents(s.shipment_id);
+    const opt = document.createElement("option");
+    opt.value = s.shipment_id;
+    const lane = `${s.pol || ""}→${s.pod || ""}`.replace("→", " → ");
+    opt.textContent = `${lane} | ${s.carrier || ""} | ${s.booking_no || ""}`.trim();
+    ddl.appendChild(opt);
   }
+  ddl.disabled = false;
+
+  // auto-select first
+  ddl.selectedIndex = 0;
+  selectedShipmentId = ddl.value;
 }
 
-// ==========================
-// LOAD EVENTS
-// ==========================
-async function loadEvents(shipment_id) {
-  const { data: events } = await client
-    .from("shipment_events")
-    .select("*")
-    .eq("shipment_id", shipment_id);
+async function reloadShipments() {
+  if (!currentUser) return alert("Login first");
+  const jobId = $("jobSelect").value;
+  if (!jobId) return;
 
-  const ul = document.getElementById(`event-${shipment_id}`);
-  ul.innerHTML = "";
-
-  for (const e of events) {
-    const li = document.createElement("li");
-    li.textContent = `${e.event_name} - ${new Date(e.event_time).toLocaleString()}`;
-    ul.appendChild(li);
-  }
+  const shipments = await fetchShipments(jobId);
+  populateShipmentDropdown(shipments);
 }
 
-// ==========================
-// CREATE SHIPMENT
-// ==========================
-async function addShipment(job_id) {
-  const pol = prompt("POL?");
-  const pod = prompt("POD?");
-  const carrier = prompt("Carrier?");
+async function createShipment() {
+  if (!currentUser) return alert("Login first");
+
+  const jobId = $("jobSelect").value;
+  if (!jobId) return alert("Select a job first");
+
+  const pol = $("pol").value.trim();
+  const pod = $("pod").value.trim();
+  const carrier = $("carrier").value.trim();
+  const vessel = $("vessel").value.trim();
+  const voyage = $("voyage").value.trim();
+  const booking_no = $("bookingNo").value.trim();
+  const bl_awb_no = $("blAwbNo").value.trim();
 
   const { error } = await client.from("shipments").insert([{
-    job_id,
-    pol,
-    pod,
-    carrier
+    job_id: jobId,
+    pol, pod, carrier, vessel, voyage, booking_no, bl_awb_no
   }]);
 
-  if (error) return alert(error.message);
+  if (error) return alert("Create shipment failed: " + error.message);
 
-  loadJobs();
+  alert("Shipment created");
+  await reloadShipments();
+  await renderSelectedJobShipmentsArea();
 }
 
-// ==========================
-// CREATE EVENT
-// ==========================
-async function addEvent(shipment_id) {
-  const event_name = prompt("Event name? (e.g. LOADED, DEPARTED)");
-  const time = new Date().toISOString();
+async function onShipmentChanged() {
+  selectedShipmentId = $("shipmentSelect").value || null;
+  await renderSelectedJobShipmentsArea();
+}
+
+// -------- EVENTS --------
+
+async function fetchEvents(shipmentId) {
+  const { data, error } = await client
+    .from("shipment_events")
+    .select("event_id, shipment_id, event_name, event_time, location, remarks, created_at")
+    .eq("shipment_id", shipmentId)
+    .order("event_time", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function addEvent() {
+  if (!currentUser) return alert("Login first");
+  if (!selectedShipmentId) return alert("Select a shipment first");
+
+  const event_name = $("eventName").value;
+  const eventTimeLocal = $("eventTime").value; // datetime-local string
+  const location = $("eventLocation").value.trim();
+  const remarks = $("eventRemarks").value.trim();
+
+  if (!eventTimeLocal) return alert("Select event time");
+
+  // Store as ISO; browser interprets datetime-local as local time (your PC time)
+  // Display layer will show in job branch timezone.
+  const event_time = new Date(eventTimeLocal).toISOString();
 
   const { error } = await client.from("shipment_events").insert([{
-    shipment_id,
+    shipment_id: selectedShipmentId,
     event_name,
-    event_time: time
+    event_time,
+    location,
+    remarks
   }]);
 
-  if (error) return alert(error.message);
+  if (error) return alert("Add event failed: " + error.message);
 
-  loadJobs();
+  alert("Event added");
+  await renderSelectedJobShipmentsArea();
 }
+
+// -------- RENDER SHIPMENTS + EVENTS AREA --------
+async function renderSelectedJobShipmentsArea() {
+  const area = $("shipmentsArea");
+  if (!selectedJob) {
+    area.textContent = "Select a job to view shipments.";
+    return;
+  }
+
+  const branchKey = `${(selectedJob.country_code || "").toUpperCase()}${(selectedJob.branch_code || "").toUpperCase()}`;
+  const tz = branchMap[branchKey]?.tz || "Asia/Singapore";
+
+  const shipments = await fetchShipments(selectedJob.job_id);
+
+  if (!shipments.length) {
+    area.innerHTML = `<div class="muted">No shipments for <b>${selectedJob.job_no}</b> yet.</div>`;
+    return;
+  }
+
+  let html = `<div><b>${selectedJob.job_no}</b> | ${selectedJob.customer_name || ""} <span class="muted">(${tz})</span></div>`;
+  html += `<ul>`;
+
+  for (const s of shipments) {
+    html += `<li>
+      <b>${(s.pol || "")} → ${(s.pod || "")}</b> | ${(s.carrier || "")} | ${(s.vessel || "")} ${(s.voyage || "")}
+      <div class="muted">Booking: ${(s.booking_no || "-")} | BL/AWB: ${(s.bl_awb_no || "-")}</div>
+    `;
+
+    const events = await fetchEvents(s.shipment_id);
+    if (!events.length) {
+      html += `<div class="muted">No events yet</div>`;
+    } else {
+      html += `<ul>`;
+      for (const e of events) {
+        const t = e.event_time ? formatInTimezone(e.event_time, tz) : "-";
+        html += `<li>${e.event_name} | ${t} ${e.location ? "| " + e.location : ""}${e.remarks ? " | " + e.remarks : ""}</li>`;
+      }
+      html += `</ul>`;
+    }
+
+    html += `</li>`;
+  }
+
+  html += `</ul>`;
+  area.innerHTML = html;
+}
+
+// -------- LOGIN --------
+async function login() {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+
+  const ok = await pingSupabase();
+  if (!ok) return alert("Cannot reach Supabase");
+
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  if (error) return alert("Login failed: " + error.message);
+
+  currentUser = data.user;
+
+  // Enable & load branches
+  setSelectDisabled("branchKey", true, "Loading branches...");
+  await loadBranchesFromDb();
+
+  // Default to user's branch (profiles), fallback SGSIN
+  const defaultBranch = await loadUserDefaultBranchKey();
+  applyDefaultBranch(defaultBranch);
+
+  // Load jobs into dropdown + list, enable job dropdown
+  setSelectDisabled("jobSelect", true, "Loading jobs...");
+  await reloadJobs();
+
+  alert("Login success: " + currentUser.email);
+}
+
+// wiring
+window.addEventListener("load", async () => {
+  await pingSupabase();
+  setSelectDisabled("branchKey", true, "Login to load branches...");
+  setSelectDisabled("jobSelect", true, "Login to load jobs...");
+  setSelectDisabled("shipmentSelect", true, "Select a job first...");
+
+  $("jobSelect").addEventListener("change", onJobChanged);
+  $("shipmentSelect").addEventListener("change", onShipmentChanged);
+});
