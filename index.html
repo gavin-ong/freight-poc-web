@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
@@ -14,7 +15,7 @@
     hr { margin: 18px 0; }
     .muted { color:#666; font-size:12px; }
     ul { margin-top:8px; }
-    code { background:#f3f3f3; padding:2px 6px; border-radius:4px; }
+    .pill { background:#f3f3f3; padding:2px 8px; border-radius:999px; }
   </style>
 </head>
 
@@ -33,10 +34,9 @@
 
   <div class="row">
     <label>Branch</label>
-    <select id="branchKey">
-      <option value="SGSIN">SGSIN (SG + SIN)</option>
-      <option value="MYKUL">MYKUL (MY + KUL)</option>
-      <option value="VNHCM">VNHCM (VN + HCM)</option>
+    <!-- ✅ Autoloaded from DB -->
+    <select id="branchKey" disabled>
+      <option>Login to load branches…</option>
     </select>
 
     <label>Mode</label>
@@ -68,15 +68,22 @@
     <button onclick="createJob()">Create Job</button>
   </div>
 
+  <div class="row muted">
+    <span class="pill">Branch dropdown is loaded from DB</span>
+    <span class="pill">Created time shown in branch timezone</span>
+    <span class="pill">YYMM counter follows branch-local date</span>
+  </div>
+
   <hr />
 
   <h2>Jobs List</h2>
   <div class="row">
     <button onclick="loadJobs()">Refresh Jobs</button>
-    <span class="muted">Shows latest 50. Times displayed using the job’s branch timezone.</span>
+    <span class="muted">Shows latest 50</span>
   </div>
   <ul id="jobsList"></ul>
 
-  <script src="/app.js?v=branch_tz_1"></script>
+  <!-- ✅ Cache-bust JS -->
+  <script src="/app.js?v=autoload_branches_1"></script>
 </body>
 </html>
