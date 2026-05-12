@@ -1,46 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Freight POC</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Freight PRD POC</title>
+
+  <!-- ✅ Correct Supabase JS include -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; }
+    input, select, button { margin: 6px 6px 6px 0; padding: 6px; }
+    hr { margin: 18px 0; }
+    .muted { color: #666; font-size: 12px; }
+  </style>
 </head>
+
 <body>
 
-<h2>Login</h2>
-<input id="email" placeholder="Email">
-<input id="password" type="password" placeholder="Password">
-<button onclick="login()">Login</button>
+  <h2>Login</h2>
+  <input id="email" placeholder="Email" autocomplete="username" />
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+  <button onclick="login()">Login</button>
+  <div id="loginStatus" class="muted"></div>
 
-<hr>
+  <hr>
 
-<h2>Create Job</h2>
+  <h2>Create Job</h2>
+  <input id="customer" placeholder="Customer Name" />
+  <input id="origin" placeholder="Origin Country" />
+  <input id="destination" placeholder="Destination Country" />
 
-<input id="customer" placeholder="Customer Name">
-<input id="origin" placeholder="Origin Country">
-<input id="destination" placeholder="Destination Country">
+  <select id="mode">
+    <option value="SEA">SEA</option>
+    <option value="AIR">AIR</option>
+    <option value="LAND">LAND</option>
+  </select>
 
-<select id="mode">
-  <option value="SEA">SEA</option>
-  <option value="AIR">AIR</option>
-  <option value="LAND">LAND</option>
-</select>
+  <select id="incoterm">
+    <option value="FOB">FOB</option>
+    <option value="CIF">CIF</option>
+    <option value="EXW">EXW</option>
+  </select>
 
-<select id="incoterm">
-  <option value="FOB">FOB</option>
-  <option value="CIF">CIF</option>
-  <option value="EXW">EXW</option>
-</select>
+  <button onclick="createJob()">Create Job</button>
 
-<button onclick="createJob()">Create Job</button>
+  <hr>
 
-<hr>
+  <h2>Jobs List</h2>
+  <button onclick="loadJobs()">Refresh Jobs</button>
+  <ul id="jobsList"></ul>
 
-<h2>Jobs List</h2>
-<button onclick="loadJobs()">Refresh Jobs</button>
-
-<ul id="jobsList"></ul>
-
-<script src="app.js"></script>
-
+  <!-- ✅ Correct app.js include -->
+  <script src="./app.js"></script>
 </body>
 </html>
