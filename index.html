@@ -1,49 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
+<html lang="enmeta charset="UTF-8" /><html lang="en">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <!-- ✅ Correct Supabase script -->
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
+    input, select, button { padding: 6px; }
+    hr { margin: 18px 0; }
+    .muted { color:#666; font-size:12px; }
+    ul { margin-top:8px; }
+  </style>
 </head>
 
 <body>
   <h2>Login</h2>
-  <input id="email" placeholder="Email" />
-  <input id="password" type="password" placeholder="Password" />
-  <button onclick="login()">Login</button>
-  <div id="loginStatus"></div>
+  <div class="row">
+    <input id="email" placeholder="Email" autocomplete="username" />
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+    <button onclick="login()">Login</button>
+    <div id="loginStatus" class="muted"></div>
+  </div>
 
-  <hr>
+  <hr />
 
-  <h2>Create Job</h2>
-  <input id="customer" placeholder="Customer Name" />
-  <input id="origin" placeholder="Origin Country" />
-  <input id="destination" placeholder="Destination Country" />
+  <h2>Create Job (CargoWise Format)</h2>
 
-  <select id="mode">
-    <option value="SEA">SEA</option>
-    <option value="AIR">AIR</option>
-    <option value="LAND">LAND</option>
-  </select>
+  <div class="row">
+    <label>Branch</label>
+    <select id="branchKey">
+      <option value="SGSIN">SGSIN (SG + SIN)</option>
+      <option value="MYKUL">MYKUL (MY + KUL)</option>
+      <option value="VNHCM">VNHCM (VN + HCM)</option>
+    </select>
 
-  <select id="incoterm">
-    <option value="FOB">FOB</option>
-    <option value="CIF">CIF</option>
-    <option value="EXW">EXW</option>
-  </select>
+    <label>Mode</label>
+    <select id="mode">
+      <option value="SEA">SEA (S)</option>
+      <option value="AIR">AIR (A)</option>
+      <option value="LAND">LAND (L)</option>
+      <option value="INTEGRATED">INTEGRATED (I)</option>
+    </select>
 
-  <button onclick="createJob()">Create Job</button>
+    <label>Job Type</label>
+    <select id="jobType">
+      <option value="EXPORT">EXPORT (O)</option>
+      <option value="IMPORT">IMPORT (I)</option>
+    </select>
 
-  <hr>
+    <label>Incoterm</label>
+    <select id="incoterm">
+      <option value="FOB">FOB</option>
+      <option value="CIF">CIF</option>
+      <option value="EXW">EXW</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <input id="customer" placeholder="Customer Name (e.g. CUST-001)" />
+    <input id="origin" placeholder="Origin Country (e.g. CN)" />
+    <input id="destination" placeholder="Destination Country (e.g. SG)" />
+    <button onclick="createJob()">Create Job</button>
+  </div>
+
+  <hr />
 
   <h2>Jobs List</h2>
-  <button onclick="loadJobs()">Refresh Jobs</button>
+  <div class="row">
+    <button onclick="loadJobs()">Refresh Jobs</button>
+    <span class="muted">(shows latest 50)</span>
+  </div>
   <ul id="jobsList"></ul>
 
-  <!-- ✅ THIS IS THE FIX -->
-  <script src="app.js?v=2"></script>
+  <!-- Load app.js (cache-busted) -->
+  <script src="app.js?v=20260512_1"></script>
 </body>
 </html>
+
+<head>
