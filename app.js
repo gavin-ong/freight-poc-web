@@ -10,7 +10,7 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-// TEST CONNECTION
+// Connection test
 async function pingSupabase() {
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
@@ -18,15 +18,14 @@ async function pingSupabase() {
     });
 
     if (!res.ok) {
-      setStatus("Supabase reachable but returned HTTP " + res.status);
+      setStatus(`Supabase reachable but health check HTTP ${res.status}`);
       return false;
     }
 
     setStatus("Supabase reachable ✅");
     return true;
-
   } catch (e) {
-    setStatus("Supabase NOT reachable ❌");
+    setStatus("Supabase NOT reachable ❌ (Failed to fetch)");
     return false;
   }
 }
@@ -40,14 +39,11 @@ async function login() {
 
   const ok = await pingSupabase();
   if (!ok) {
-    alert("Cannot reach Supabase");
+    alert("Login blocked: browser cannot reach Supabase (Failed to fetch).");
     return;
   }
 
-  const { data, error } = await client.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
 
   if (error) {
     alert("Login failed: " + error.message);
@@ -56,20 +52,16 @@ async function login() {
 
   currentUser = data.user;
   alert("Login success: " + currentUser.email);
-
   loadJobs();
 }
 
 // CREATE JOB
 async function createJob() {
-  if (!currentUser) {
-    alert("Login first");
-    return;
-  }
+  if (!currentUser) return alert("Login first");
 
-  const customer = document.getElementById("customer").value;
-  const origin = document.getElementById("origin").value;
-  const destination = document.getElementById("destination").value;
+  const customer = document.getElementById("customer").value.trim();
+  const origin = document.getElementById("origin").value.trim();
+  const destination = document.getElementById("destination").value.trim();
   const mode = document.getElementById("mode").value;
   const incoterm = document.getElementById("incoterm").value;
 
@@ -77,15 +69,12 @@ async function createJob() {
     customer_name: customer,
     origin_country: origin,
     destination_country: destination,
-    mode: mode,
-    incoterm: incoterm,
+    mode,
+    incoterm,
     created_by: currentUser.id
   }]);
 
-  if (error) {
-    alert("Create job failed: " + error.message);
-    return;
-  }
+  if (error) return alert("Create job failed: " + error.message);
 
   alert("Job created successfully");
   loadJobs();
@@ -98,22 +87,14 @@ async function loadJobs() {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+  if (error) return alert("Load jobs failed: " + error.message);
 
   const list = document.getElementById("jobsList");
   list.innerHTML = "";
 
   data.forEach(job => {
     const li = document.createElement("li");
-    li.innerText =
-      "JOB-" + job.job_no +
-      " | " + job.customer_name +
-      " | " + job.origin_country + " → " + job.destination_country +
-      " | " + job.mode;
-
+    li.textContent = `JOB-${job.job_no} | ${job.customer_name || ""} | ${job.origin_country || ""} → ${job.destination_country || ""} | ${job.mode || ""}`;
     list.appendChild(li);
   });
 }
