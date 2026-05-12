@@ -60,20 +60,17 @@ function setBranchDropdownState(text, disabled = true) {
   ddl.disabled = disabled;
 }
 
-/** ✅ Sort dropdown by Country+Branch (branch_key) */
+/** Sort dropdown by Country+Branch (branch_key) */
 function populateBranchDropdown() {
   const ddl = document.getElementById("branchKey");
   ddl.innerHTML = "";
 
-  // Sort by branch_key (Country+Branch) ASC
   const keys = Object.keys(branchMap).sort((a, b) => {
-    // primary: branch_key
     const ak = (a || "").toUpperCase();
     const bk = (b || "").toUpperCase();
     if (ak < bk) return -1;
     if (ak > bk) return 1;
 
-    // secondary: branch_name
     const an = (branchMap[a]?.name || "").toUpperCase();
     const bn = (branchMap[b]?.name || "").toUpperCase();
     if (an < bn) return -1;
@@ -90,7 +87,7 @@ function populateBranchDropdown() {
     const info = branchMap[k] || {};
     const opt = document.createElement("option");
     opt.value = k;
-    opt.textContent = info.name ? `${k} (${info.name})` : k;
+    opt.textContent = info.name ? `${k} (${info.name})` : k; // keep current style
     ddl.appendChild(opt);
   }
 
@@ -107,13 +104,12 @@ async function loadBranchesFromDb() {
   if (error) {
     console.error("Failed to load branches from DB:", error);
 
-    // Fallback
+    // fallback
     branchMap = {
       "SGSIN": { name: "Singapore", tz: "Asia/Singapore" },
       "MYKUL": { name: "Kuala Lumpur", tz: "Asia/Kuala_Lumpur" },
       "VNHCM": { name: "Ho Chi Minh", tz: "Asia/Ho_Chi_Minh" }
     };
-
     populateBranchDropdown();
     return;
   }
@@ -129,6 +125,52 @@ async function loadBranchesFromDb() {
 
   branchMap = map;
   populateBranchDropdown();
+}
+
+/** Load default branch from profiles for current user */
+async function loadUserDefaultBranchKey() {
+  if (!currentUser) return null;
+
+  const { data, error } = await client
+    .from("profiles")
+    .select("default_branch_key")
+    .eq("id", currentUser.id)
+    .single();
+
+  if (error) {
+    console.warn("No profile/default branch found (using fallback SGSIN):", error.message);
+    return null;
+  }
+
+  const key = (data?.default_branch_key || "").toUpperCase().trim();
+  return key || null;
+}
+
+/** Apply default branch to dropdown, fallback to SGSIN per your choice (Q2=A) */
+function applyDefaultBranchToDropdown(defaultKey) {
+  const ddl = document.getElementById("branchKey");
+  if (!ddl) return;
+
+  const fallback = "SGSIN";
+  const target = (defaultKey || fallback).toUpperCase();
+
+  // Set only if option exists; otherwise fallback to first option (or SGSIN if present)
+  const exists = Array.from(ddl.options).some(o => (o.value || "").toUpperCase() === target);
+
+  if (exists) {
+    ddl.value = target;
+    return;
+  }
+
+  // Try fallback SGSIN if default not found
+  const hasFallback = Array.from(ddl.options).some(o => (o.value || "").toUpperCase() === fallback);
+  if (hasFallback) {
+    ddl.value = fallback;
+    return;
+  }
+
+  // Otherwise just pick first
+  if (ddl.options.length > 0) ddl.selectedIndex = 0;
 }
 
 window.addEventListener("load", async () => {
@@ -149,9 +191,13 @@ async function login() {
 
   currentUser = data.user;
 
-  // After login, load branches into dropdown (sorted)
+  // Load branches
   setBranchDropdownState("Loading branches…", true);
   await loadBranchesFromDb();
+
+  // Apply user default branch from DB
+  const defaultBranchKey = await loadUserDefaultBranchKey();
+  applyDefaultBranchToDropdown(defaultBranchKey);
 
   alert("Login success: " + currentUser.email);
   await loadJobs();
