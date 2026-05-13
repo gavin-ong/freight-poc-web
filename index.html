@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freight PRD POC</title>
 
-  <!-- ✅ Correct Supabase script include -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js  <style>
+  <!-- ✅ Correct Supabase script include (fixed) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
     body { font-family: Arial, sans-serif; margin: 12px; }
     .top { margin-bottom: 10px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -25,6 +27,13 @@
     .w160 { width: 160px; }
     .w200 { width: 200px; }
     .w260 { width: 260px; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:11px; }
+    .kpi { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+    .kpi .pill b { margin-right:6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .table { width:100%; border-collapse: collapse; margin-top:8px; }
+    .table th, .table td { border:1px solid #eee; padding:6px; font-size:12px; text-align:left; }
+    .table th { background:#fafafa; }
   </style>
 </head>
 
@@ -37,6 +46,7 @@
       <input id="password" class="w200" type="password" placeholder="Password" autocomplete="current-password" />
       <button onclick="login()">Login</button>
       <span id="loginStatus" class="muted"></span>
+      <span id="userRoleBadge" class="pill muted" style="display:none;"></span>
     </div>
   </div>
 
@@ -148,6 +158,63 @@
     </div>
   </div>
 
+  <!-- NEW THIRD CARD (C): Charges + Invoice -->
+  <div class="card" style="margin-top:12px;">
+    <h3>Charges + Invoice (B5)</h3>
+
+    <div class="row muted">
+      <span class="pill">Invoice currency: <b>USD</b> (converted per line using invoice-date FX)</span>
+      <span class="pill">Only <b>FIN</b> can generate invoice draft</span>
+    </div>
+
+    <hr />
+
+    <div class="row">
+      <label class="small">Side</label>
+      <select id="chargeSide" class="w120">
+        <option value="SELL">SELL</option>
+        <option value="BUY">BUY</option>
+      </select>
+
+      <input id="chargeCode" class="w120" placeholder="Charge Code (e.g. OFR)" />
+      <input id="chargeDesc" class="w260" placeholder="Description (e.g. Ocean Freight)" />
+
+      <input id="chargeQty" class="w120" type="number" step="0.0001" value="1" />
+      <input id="chargeUnitPrice" class="w140" type="number" step="0.000001" placeholder="Unit Price" />
+
+      <label class="small">Currency</label>
+      <select id="chargeCurrency" class="w120" disabled>
+        <option value="">Loading...</option>
+      </select>
+
+      <button onclick="addCharge()">Add Charge</button>
+    </div>
+
+    <div class="kpi">
+      <span class="pill mono"><b>SELL USD</b> <span id="kpiSellUsd">-</span></span>
+      <span class="pill mono"><b>BUY USD</b> <span id="kpiBuyUsd">-</span></span>
+      <span class="pill mono"><b>PROFIT USD</b> <span id="kpiProfitUsd">-</span></span>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="btnGenerateInvoice" onclick="generateInvoiceDraft()" disabled>Generate Invoice Draft (FIN only)</button>
+      <span id="invoiceStatus" class="muted"></span>
+    </div>
+
+    <hr />
+
+    <div class="row">
+      <div style="flex:1;">
+        <h3 style="margin-top:0;">Charges (Selected Job)</h3>
+        <div id="chargesArea" class="muted">Select a job to load charges.</div>
+      </div>
+      <div style="flex:1;">
+        <h3 style="margin-top:0;">Latest Invoice Lines (Selected Job)</h3>
+        <div id="invoiceArea" class="muted">Select a job to load invoice lines.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="jobs">
     <h3>Jobs List</h3>
     <div class="row">
@@ -163,8 +230,7 @@
     <div id="shipmentsArea" class="muted">Select a job to view shipments.</div>
   </div>
 
-  <!-- ✅ IMPORTANT: new cache-buster so index.html definitely loads the newest JS -->
-  <script src="./app.js?v=shipments_dropdowns_fix_20260512b"></script>
+  <!-- Cache buster -->
+  <script src="./app.js?v=b5_charges_invoice_ui_20260513a"></script>
 </body>
 </html>
-``
