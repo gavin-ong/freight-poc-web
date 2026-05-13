@@ -4,20 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CargoWise-ish MVP</title>
+
+  <!-- CW-MVP BUILD: 2026-05-13e -->
   <style>
     :root{
       --bg1:#071224;
       --bg2:#0a2a45;
       --card:#0b1a33cc;
-      --card2:#0b1a33f2;
       --border:#1e3a5f;
       --text:#e9f1ff;
       --muted:#9fb6d7;
       --ok:#9fffb0;
       --err:#ff7b7b;
-      --btn:#1f63ff;
-      --btn2:#0f3db3;
-      --chip:#0f2446;
       --shadow:0 20px 60px rgba(0,0,0,.45);
       --radius:16px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -46,7 +44,7 @@
       justify-items:center;
     }
     .card{
-      width:min(560px, 100%);
+      width:min(760px, 100%);
       background:var(--card);
       border:1px solid rgba(255,255,255,.08);
       border-radius:var(--radius);
@@ -72,17 +70,8 @@
     .title{font-weight:700;font-size:14px}
     .sub{color:var(--muted);font-size:12px;margin-top:3px}
     .cardBody{padding:18px}
-    h2{
-      margin:0 0 14px;
-      font-size:14px;
-      letter-spacing:.2px;
-    }
-    label{
-      display:block;
-      color:var(--muted);
-      font-size:12px;
-      margin:10px 0 6px;
-    }
+    h2{margin:0 0 14px;font-size:14px;letter-spacing:.2px}
+    label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
     input, select{
       width:100%;
       height:38px;
@@ -97,7 +86,7 @@
     .row{display:grid; gap:10px}
     .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
     .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-    .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px}
+    .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap}
     button{
       cursor:pointer;
       height:36px;
@@ -108,57 +97,16 @@
       padding:0 14px;
       font-weight:600;
     }
-    .btn.primary{
-      background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));
-      border-color:rgba(31,99,255,.35);
-    }
-    .btn.good{
-      background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));
-      border-color:rgba(0,200,150,.25);
-    }
-    .btn.warn{
-      background:linear-gradient(180deg, rgba(255,183,0,1), rgba(193,123,0,1));
-      border-color:rgba(255,183,0,.25);
-      color:#081018;
-    }
+    .btn.primary{background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));}
+    .btn.good{background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));}
+    .btn.warn{background:linear-gradient(180deg, rgba(255,183,0,1), rgba(193,123,0,1));color:#081018;}
     .muted{color:var(--muted); font-size:12px}
-    .status{
-      margin-top:10px;
-      font-size:12px;
-      word-break:break-word;
-    }
-    .badge{
-      margin-top:8px;
-      font-size:12px;
-      word-break:break-word;
-      opacity:.95;
-    }
-    .section{
-      margin-top:16px;
-      padding-top:14px;
-      border-top:1px solid rgba(255,255,255,.08);
-    }
-    .chip{
-      display:inline-block;
-      padding:6px 10px;
-      border-radius:999px;
-      background:rgba(15,36,70,.8);
-      border:1px solid rgba(255,255,255,.08);
-      color:var(--muted);
-      font-size:12px;
-    }
-    table{
-      width:100%;
-      border-collapse:collapse;
-      margin-top:10px;
-      font-size:12px;
-    }
-    th, td{
-      border-bottom:1px solid rgba(255,255,255,.08);
-      padding:10px 8px;
-      text-align:left;
-      vertical-align:top;
-    }
+    .status{margin-top:10px;font-size:12px;word-break:break-word}
+    .badge{margin-top:8px;font-size:12px;word-break:break-word;opacity:.95}
+    .section{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+    .chip{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(15,36,70,.8);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+    th, td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;vertical-align:top}
     th{color:var(--muted); font-weight:700}
     tr:hover{background:rgba(255,255,255,.03)}
     .small{font-size:11px}
@@ -222,7 +170,7 @@
             <select id="branch"></select>
           </div>
           <div style="display:flex;align-items:flex-end;gap:10px;">
-            <span class="chip" id="currentJobChip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
+            <span class="chip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
           </div>
         </div>
 
@@ -280,7 +228,7 @@
             <tbody id="jobsTableBody"></tbody>
           </table>
 
-          <div class="muted small" id="jobsHint" style="margin-top:8px;">
+          <div class="muted small" style="margin-top:8px;">
             Tip: Click a job row to select it (loads charges).
           </div>
         </div>
@@ -335,18 +283,18 @@
             <tbody id="chargesTableBody"></tbody>
           </table>
 
-          <div class="muted small" id="chargesHint" style="margin-top:8px;">
+          <div class="muted small" style="margin-top:8px;">
             Tip: Select a job first. Charges are tied to the selected job.
           </div>
         </div>
 
-        <!-- MILESTONES (optional placeholder) -->
+        <!-- MILESTONES placeholder -->
         <div class="section">
           <h2>Milestones</h2>
           <div class="btnBar">
             <button id="btnAddMilestone" class="btn">Add</button>
           </div>
-          <div class="muted small">Placeholder (we will wire this next).</div>
+          <div class="muted small">Placeholder (we wire this next).</div>
         </div>
 
       </div>
@@ -354,7 +302,7 @@
 
   </div>
 
-  <!-- Your app.js -->
-  <script src="./app.js?v=1"></script>
+  <!-- IMPORTANT: Correct script tag -->
+  <script src="./app.js?v=20260513e"></script>
 </body>
 </html>
