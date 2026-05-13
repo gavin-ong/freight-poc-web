@@ -1,401 +1,360 @@
-/* =========================================================
-   CargoWise-ish MVP - app.js (GLOBAL DEBUG + REAL LOGIN STATE)
-   Fixes:
-   - Console can’t see supabase -> expose window.supabaseClient
-   - “Feels like not logged in” -> show badge + sticky status
-   - Menlo/SafeView click weirdness -> pointerdown capture
-   ========================================================= */
-
-(function () {
-  // -------------------------------
-  // CONFIG (YOUR URL + KEY)
-  // -------------------------------
-  const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
-  const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const APP_VERSION = "app.js v2026-05-13d (expose client + badge + sticky errors)";
-
-  let supabaseClient = null;
-  let currentUser = null;
-
-  // -------------------------------
-  // HELPERS
-  // -------------------------------
-  const byId = (id) => document.getElementById(id);
-
-  function setStatus(msg, isError = false, sticky = false) {
-    const el =
-      byId("status") ||
-      byId("statusText") ||
-      byId("lblStatus") ||
-      byId("txtStatus");
-
-    if (el) {
-      el.textContent = msg;
-      el.style.color = isError ? "#ff7b7b" : "#9fffb0";
-      el.dataset.sticky = sticky ? "1" : "0";
-    } else {
-      (isError ? console.error : console.log)(msg);
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CargoWise-ish MVP</title>
+  <style>
+    :root{
+      --bg1:#071224;
+      --bg2:#0a2a45;
+      --card:#0b1a33cc;
+      --card2:#0b1a33f2;
+      --border:#1e3a5f;
+      --text:#e9f1ff;
+      --muted:#9fb6d7;
+      --ok:#9fffb0;
+      --err:#ff7b7b;
+      --btn:#1f63ff;
+      --btn2:#0f3db3;
+      --chip:#0f2446;
+      --shadow:0 20px 60px rgba(0,0,0,.45);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
     }
-  }
-
-  function isStickyStatus() {
-    const el =
-      byId("status") ||
-      byId("statusText") ||
-      byId("lblStatus") ||
-      byId("txtStatus");
-    return !!(el && el.dataset.sticky === "1");
-  }
-
-  function ensureStatusElementExists() {
-    if (byId("status") || byId("statusText")) return;
-
-    const anchor = byId("btnLogin") || document.querySelector("button");
-    if (!anchor || !anchor.parentElement) return;
-
-    const status = document.createElement("div");
-    status.id = "status";
-    status.style.marginTop = "10px";
-    status.style.fontSize = "12px";
-    status.style.opacity = "0.95";
-    status.style.wordBreak = "break-word";
-    anchor.parentElement.appendChild(status);
-  }
-
-  function upsertBadge(text, ok = true) {
-    let badge = byId("loggedInBadge");
-    if (!badge) {
-      badge = document.createElement("div");
-      badge.id = "loggedInBadge";
-      badge.style.marginTop = "10px";
-      badge.style.fontSize = "12px";
-      badge.style.opacity = "0.95";
-      badge.style.wordBreak = "break-word";
-
-      const statusEl = byId("status") || byId("statusText");
-      if (statusEl && statusEl.parentElement) statusEl.parentElement.appendChild(badge);
-      else document.body.appendChild(badge);
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      min-height:100vh;
+      background:
+        radial-gradient(900px 500px at 20% 30%, rgba(35,110,255,.35), transparent 60%),
+        radial-gradient(800px 500px at 75% 70%, rgba(0,255,225,.18), transparent 55%),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:54px 16px;
     }
-    badge.style.color = ok ? "#9fffb0" : "#ff7b7b";
-    badge.textContent = text;
-  }
-
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = src;
-      s.async = true;
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-
-  function getEmailPassword() {
-    const emailEl =
-      byId("email") ||
-      byId("txtEmail") ||
-      byId("inpEmail") ||
-      document.querySelector('input[type="email"]') ||
-      document.querySelector('input[name="email"]');
-
-    const passEl =
-      byId("password") ||
-      byId("txtPassword") ||
-      byId("inpPassword") ||
-      document.querySelector('input[type="password"]') ||
-      document.querySelector('input[name="password"]');
-
-    return {
-      email: emailEl ? emailEl.value.trim() : "",
-      password: passEl ? passEl.value : ""
-    };
-  }
-
-  // -------------------------------
-  // OPTIONAL UI TOGGLE (best effort)
-  // -------------------------------
-  function toggleUI(isLoggedIn) {
-    // If you have containers, great. If not, we still show badge + status.
-    const loginCard =
-      byId("loginCard") || byId("loginContainer") || byId("authCard") || byId("authContainer");
-    const appCard =
-      byId("appCard") || byId("appContainer") || byId("mainApp") || byId("appMain");
-
-    if (loginCard) loginCard.style.display = isLoggedIn ? "none" : "";
-    if (appCard) appCard.style.display = isLoggedIn ? "" : "none";
-
-    const btnLogin = byId("btnLogin");
-    const btnLogout = byId("btnLogout");
-    const btnSignOut = byId("btnSignOut");
-
-    if (btnLogin) btnLogin.style.display = isLoggedIn ? "none" : "";
-    if (btnLogout) btnLogout.style.display = isLoggedIn ? "" : "none";
-    if (btnSignOut) btnSignOut.style.display = isLoggedIn ? "" : "none";
-  }
-
-  // -------------------------------
-  // SUPABASE INIT
-  // -------------------------------
-  async function initSupabase() {
-    ensureStatusElementExists();
-
-    if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Loading Supabase library...");
-      await loadScript(SUPABASE_CDN);
+    .wrap{
+      width:min(1040px, 100%);
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:18px;
+      justify-items:center;
     }
-
-    if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Supabase library failed to load.", true, true);
-      throw new Error("Supabase createClient missing");
+    .card{
+      width:min(560px, 100%);
+      background:var(--card);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
     }
-
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    // EXPOSE FOR DEBUGGING IN DEVTOOLS
-    window.supabaseClient = supabaseClient;
-
-    console.log(APP_VERSION);
-    if (!isStickyStatus()) setStatus("Ready.");
-  }
-
-  // -------------------------------
-  // AUTH
-  // -------------------------------
-  async function signIn() {
-    try {
-      const { email, password } = getEmailPassword();
-
-      if (!email || !password) {
-        setStatus("Email and password required.", true, true);
-        upsertBadge("❌ Missing email/password", false);
-        return;
-      }
-
-      setStatus("Signing in...");
-
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        setStatus("Login failed: " + error.message, true, true);
-        upsertBadge("❌ Login failed: " + error.message, false);
-        console.error("Auth error:", error);
-        return;
-      }
-
-      // Confirm session exists (this is the REAL truth)
-      const s = await supabaseClient.auth.getSession();
-      const sessionUser = s?.data?.session?.user || data?.user || null;
-
-      if (!sessionUser) {
-        setStatus("Login did not create a session (key/auth settings issue).", true, true);
-        upsertBadge("❌ No session created after login", false);
-        console.error("No session after signIn", { data, session: s });
-        return;
-      }
-
-      currentUser = sessionUser;
-      upsertBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
-      toggleUI(true);
-
-      await afterLogin();
-
-    } catch (e) {
-      setStatus("Login crashed: " + (e.message || e), true, true);
-      upsertBadge("❌ Login crashed: " + (e.message || e), false);
-      console.error(e);
+    .cardHeader{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:18px 18px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(180deg, rgba(255,255,255,.03), transparent);
     }
-  }
-
-  async function signOut() {
-    setStatus("Signing out...");
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
-      setStatus("Logout failed: " + error.message, true, true);
-      upsertBadge("❌ Logout failed: " + error.message, false);
-      return;
+    .logo{
+      width:28px;height:28px;border-radius:10px;
+      background:linear-gradient(135deg, rgba(63,187,255,1), rgba(0,255,196,1));
+      box-shadow:0 10px 20px rgba(0,255,196,.12);
+      flex:0 0 auto;
     }
-    currentUser = null;
-    toggleUI(false);
-    setStatus("Signed out.", false, true);
-    upsertBadge("Signed out.", true);
-  }
-
-  async function restoreSession() {
-    setStatus("Checking session...");
-    const { data, error } = await supabaseClient.auth.getSession();
-
-    if (error) {
-      setStatus("Session error: " + error.message, true, true);
-      upsertBadge("❌ Session error: " + error.message, false);
-      return;
+    .titleBox{line-height:1.1}
+    .title{font-weight:700;font-size:14px}
+    .sub{color:var(--muted);font-size:12px;margin-top:3px}
+    .cardBody{padding:18px}
+    h2{
+      margin:0 0 14px;
+      font-size:14px;
+      letter-spacing:.2px;
     }
-
-    if (data?.session?.user) {
-      currentUser = data.session.user;
-      upsertBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
-      toggleUI(true);
-      await afterLogin();
-      return;
+    label{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin:10px 0 6px;
     }
-
-    currentUser = null;
-    toggleUI(false);
-    if (!isStickyStatus()) setStatus("Ready.");
-  }
-
-  // -------------------------------
-  // DATA LOADERS (RLS DIAG)
-  // -------------------------------
-  async function loadBranches() {
-    const dropdown = byId("branch") || byId("ddlBranch");
-    if (!dropdown) return { ok: true };
-
-    const { data, error } = await supabaseClient
-      .from("branches")
-      .select("country_code, branch_code")
-      .order("country_code", { ascending: true })
-      .order("branch_code", { ascending: true });
-
-    if (error) return { ok: false, msg: "branches: " + error.message };
-
-    dropdown.innerHTML = "";
-    (data || []).forEach((b) => {
-      const opt = document.createElement("option");
-      opt.value = b.branch_code;
-      opt.textContent = `${b.country_code} - ${b.branch_code}`;
-      dropdown.appendChild(opt);
-    });
-
-    return { ok: true };
-  }
-
-  async function loadUserProfile() {
-    if (!currentUser) return { ok: false, msg: "No user" };
-
-    const { data, error } = await supabaseClient
-      .from("users")
-      .select("branch_code, role")
-      .eq("id", currentUser.id)
-      .single();
-
-    if (error) return { ok: false, msg: "users: " + error.message };
-
-    const dropdown = byId("branch") || byId("ddlBranch");
-    if (dropdown && data?.branch_code) dropdown.value = data.branch_code;
-
-    return { ok: true };
-  }
-
-  async function loadJobs() {
-    const tbody = byId("jobsTableBody");
-    if (!tbody) return { ok: true };
-
-    const { data, error } = await supabaseClient
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) return { ok: false, msg: "jobs: " + error.message };
-
-    tbody.innerHTML = "";
-    (data || []).forEach((job) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${job.job_no ?? ""}</td>
-        <td>${job.country_code ?? ""}</td>
-        <td>${job.branch_code ?? ""}</td>
-        <td>${job.transport_mode ?? ""}</td>
-        <td>${job.job_type ?? ""}</td>
-        <td>${job.customer_name ?? ""}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    return { ok: true };
-  }
-
-  async function afterLogin() {
-    setStatus("Loading data...");
-
-    const results = await Promise.all([loadBranches(), loadUserProfile(), loadJobs()]);
-    const bad = results.find((r) => r && r.ok === false);
-
-    if (bad) {
-      setStatus("✅ Logged in, but data blocked: " + bad.msg, true, true);
-      upsertBadge("✅ Logged in as: " + (currentUser?.email || "(unknown)") + " | ⚠ Data blocked: " + bad.msg, false);
-      console.warn("Data blocked (RLS/policies):", bad.msg);
-      return;
+    input, select{
+      width:100%;
+      height:38px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.07);
+      color:var(--text);
+      padding:0 12px;
+      outline:none;
     }
+    input::placeholder{color:rgba(233,241,255,.45)}
+    .row{display:grid; gap:10px}
+    .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+    .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px}
+    button{
+      cursor:pointer;
+      height:36px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      color:var(--text);
+      background:rgba(255,255,255,.08);
+      padding:0 14px;
+      font-weight:600;
+    }
+    .btn.primary{
+      background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));
+      border-color:rgba(31,99,255,.35);
+    }
+    .btn.good{
+      background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));
+      border-color:rgba(0,200,150,.25);
+    }
+    .btn.warn{
+      background:linear-gradient(180deg, rgba(255,183,0,1), rgba(193,123,0,1));
+      border-color:rgba(255,183,0,.25);
+      color:#081018;
+    }
+    .muted{color:var(--muted); font-size:12px}
+    .status{
+      margin-top:10px;
+      font-size:12px;
+      word-break:break-word;
+    }
+    .badge{
+      margin-top:8px;
+      font-size:12px;
+      word-break:break-word;
+      opacity:.95;
+    }
+    .section{
+      margin-top:16px;
+      padding-top:14px;
+      border-top:1px solid rgba(255,255,255,.08);
+    }
+    .chip{
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(15,36,70,.8);
+      border:1px solid rgba(255,255,255,.08);
+      color:var(--muted);
+      font-size:12px;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+      font-size:12px;
+    }
+    th, td{
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:10px 8px;
+      text-align:left;
+      vertical-align:top;
+    }
+    th{color:var(--muted); font-weight:700}
+    tr:hover{background:rgba(255,255,255,.03)}
+    .small{font-size:11px}
+    .mono{font-family:var(--mono)}
+    .hidden{display:none}
+  </style>
+</head>
 
-    setStatus("✅ Logged in and data loaded.");
-  }
+<body>
+  <div class="wrap">
 
-  // -------------------------------
-  // EVENT BINDING (Menlo/SafeView proof)
-  // -------------------------------
-  function installTriggers() {
-    // pointerdown capture catches most “click swallowed” cases
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        const btn = e.target?.closest ? e.target.closest("button") : null;
-        if (!btn) return;
+    <!-- LOGIN CARD -->
+    <div class="card" id="loginCard">
+      <div class="cardHeader">
+        <div class="logo"></div>
+        <div class="titleBox">
+          <div class="title">CargoWise-ish MVP</div>
+          <div class="sub">Login to manage jobs, charges & invoices</div>
+        </div>
+      </div>
 
-        const id = (btn.id || "").trim();
-        const text = (btn.textContent || "").trim().toLowerCase();
+      <div class="cardBody">
+        <h2>Sign in</h2>
 
-        if (id === "btnLogin" || text === "login") {
-          e.preventDefault();
-          signIn();
-        }
-        if (id === "btnLogout" || id === "btnSignOut" || text === "logout" || text === "sign out") {
-          e.preventDefault();
-          signOut();
-        }
-      },
-      true
-    );
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="name@company.com" autocomplete="username" />
 
-    // Enter key triggers login
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !currentUser) {
-        const hasEmail = !!(byId("email") || document.querySelector('input[type="email"]'));
-        const hasPass = !!(byId("password") || document.querySelector('input[type="password"]'));
-        if (hasEmail && hasPass) {
-          e.preventDefault();
-          signIn();
-        }
-      }
-    });
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
 
-    // Expose debug helpers (so you can test without clicking)
-    window.__cw_login = signIn;
-    window.__cw_logout = signOut;
-    window.__cw_session = async () => {
-      const r = await supabaseClient.auth.getSession();
-      console.log("SESSION:", r.data.session);
-      console.log("EMAIL:", r.data.session?.user?.email);
-      return r;
-    };
-  }
+        <div class="btnBar">
+          <button id="btnLogin" class="btn primary">Login</button>
+          <button id="btnLogout" class="btn hidden">Logout</button>
+          <button id="btnSignOut" class="btn hidden">Sign out</button>
+        </div>
 
-  // -------------------------------
-  // INIT
-  // -------------------------------
-  async function init() {
-    await initSupabase();
-    installTriggers();
-    await restoreSession();
-  }
+        <div id="status" class="status muted">Ready.</div>
+        <div id="loggedInBadge" class="badge"></div>
 
-  document.addEventListener("DOMContentLoaded", () => {
-    init().catch((e) => {
-      console.error(e);
-      setStatus("Init failed: " + (e.message || e), true, true);
-      upsertBadge("❌ Init failed: " + (e.message || e), false);
-    });
-  });
-})();
-``
+        <div class="muted small" style="margin-top:10px;">
+          Tip: If login fails after role/branch changes, refresh once to reload session state.
+        </div>
+      </div>
+    </div>
+
+    <!-- APP CARD -->
+    <div class="card hidden" id="appCard">
+      <div class="cardHeader">
+        <div class="logo"></div>
+        <div class="titleBox">
+          <div class="title">Operations</div>
+          <div class="sub">Jobs • Charges • Draft Invoice</div>
+        </div>
+      </div>
+
+      <div class="cardBody">
+
+        <div class="row2">
+          <div>
+            <label>Branch</label>
+            <select id="branch"></select>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:10px;">
+            <span class="chip" id="currentJobChip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
+          </div>
+        </div>
+
+        <!-- JOBS -->
+        <div class="section">
+          <h2>Jobs</h2>
+
+          <div class="row3">
+            <div>
+              <label>Country Code</label>
+              <input id="country" placeholder="SG" />
+            </div>
+            <div>
+              <label>Transport Mode</label>
+              <select id="transport_mode">
+                <option value="S">S (Sea)</option>
+                <option value="A">A (Air)</option>
+                <option value="L">L (Land)</option>
+                <option value="I">I (Integrated)</option>
+              </select>
+            </div>
+            <div>
+              <label>Job Type</label>
+              <select id="job_type">
+                <option value="O">O (Export)</option>
+                <option value="I">I (Import)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Customer Name</label>
+              <input id="customer" placeholder="Customer / Shipper" />
+            </div>
+          </div>
+
+          <div class="btnBar">
+            <button id="btnCreateJob" class="btn good">Create Job</button>
+            <button id="btnRefreshJobs" class="btn">Refresh</button>
+            <button id="btnRefreshJobDetails" class="btn">Refresh Details</button>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Job No</th>
+                <th>Country</th>
+                <th>Branch</th>
+                <th>Mode</th>
+                <th>Type</th>
+                <th>Customer</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTableBody"></tbody>
+          </table>
+
+          <div class="muted small" id="jobsHint" style="margin-top:8px;">
+            Tip: Click a job row to select it (loads charges).
+          </div>
+        </div>
+
+        <!-- CHARGES -->
+        <div class="section">
+          <h2>Charges</h2>
+
+          <div class="row3">
+            <div>
+              <label>Charge Code</label>
+              <input id="charge_code" placeholder="FRT / DOC / THC" />
+            </div>
+            <div>
+              <label>Amount</label>
+              <input id="amount" placeholder="100.00" />
+            </div>
+            <div>
+              <label>Currency</label>
+              <input id="currency" placeholder="USD" />
+            </div>
+          </div>
+
+          <div class="row2">
+            <div>
+              <label>Type</label>
+              <select id="charge_type">
+                <option value="SELL">SELL</option>
+                <option value="BUY">BUY</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:10px;">
+              <button id="btnAddCharge" class="btn good" style="width:100%;">Add Charge</button>
+            </div>
+          </div>
+
+          <div class="btnBar">
+            <button id="btnRefreshCharges" class="btn">Refresh Charges</button>
+            <button id="btnRefreshProfit" class="btn">Refresh Profit</button>
+            <button id="btnDraftInvoice" class="btn warn">Generate Invoice Draft</button>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Amount</th>
+                <th>Currency</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody id="chargesTableBody"></tbody>
+          </table>
+
+          <div class="muted small" id="chargesHint" style="margin-top:8px;">
+            Tip: Select a job first. Charges are tied to the selected job.
+          </div>
+        </div>
+
+        <!-- MILESTONES (optional placeholder) -->
+        <div class="section">
+          <h2>Milestones</h2>
+          <div class="btnBar">
+            <button id="btnAddMilestone" class="btn">Add</button>
+          </div>
+          <div class="muted small">Placeholder (we will wire this next).</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Your app.js -->
+  <script src="./app.js?v=1"></script>
+</body>
+</html>
