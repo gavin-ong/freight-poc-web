@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>CargoWise-ish MVP</title>
+
   <style>
     :root{--bg1:#071224;--bg2:#0a2a45;--card:#0b1a33cc;--text:#e9f1ff;--muted:#9fb6d7;--ok:#9fffb0;--err:#ff7b7b;--shadow:0 20px 60px rgba(0,0,0,.45);--r:16px;--mono:ui-monospace,Menlo,Consolas,monospace;--sans:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     *{box-sizing:border-box}
@@ -64,7 +65,7 @@
         </div>
         <div id="status">Ready.</div>
         <div id="badge"></div>
-        <div class="build" id="buildMarker">BUILD: RECOVERY-3 (HTML)</div>
+        <div class="build" id="buildMarker">BUILD: RECOVERY-3B (HTML)</div>
       </div>
     </div>
 
@@ -110,9 +111,7 @@
               <button id="btnCreateJob" class="good" style="width:100%">Create Job</button>
             </div>
           </div>
-          <div class="btnbar">
-            <button id="btnRefreshJobs">Refresh Jobs</button>
-          </div>
+          <div class="btnbar"><button id="btnRefreshJobs">Refresh Jobs</button></div>
           <table>
             <thead><tr><th>Job No</th><th>Country</th><th>Branch</th><th>Mode</th><th>Type</th><th>Customer</th></tr></thead>
             <tbody id="jobsTableBody"></tbody>
@@ -135,15 +134,12 @@
               <button id="btnAddCharge" class="good" style="width:100%">Add Charge</button>
             </div>
           </div>
-          <div class="btnbar">
-            <button id="btnRefreshCharges">Refresh Charges</button>
-          </div>
+          <div class="btnbar"><button id="btnRefreshCharges">Refresh Charges</button></div>
           <table>
             <thead><tr><th>Code</th><th>Amount</th><th>Currency</th><th>Type</th></tr></thead>
             <tbody id="chargesTableBody"></tbody>
           </table>
-
-          <div class="build">BUILD: RECOVERY-3 (UI has #branch/#jobsTableBody)</div>
+          <div class="build">BUILD: RECOVERY-3B (UI)</div>
         </div>
 
       </div>
@@ -151,6 +147,30 @@
 
   </div>
 
-  <!-- ✅ Correct script tag -->
-  <script src="./app.js?v=recovery3ody>
+  <!-- PROOF HTML executes -->
+  <script>
+    console.log("✅ HTML loaded: RECOVERY-3B");
+  </script>
+
+  <!-- NORMAL SCRIPT TAG -->
+  <script src="./app.js?v=recovery3b" defer></script>
+
+  <!-- FAILSAFE LOADER (forces request + prints success/fail) -->
+  <script>
+    (function(){
+      const expected = "app.js?v=recovery3b";
+      const already = [...document.querySelectorAll("script")].some(s => (s.src||"").includes(expected));
+      if (already) {
+        console.log("✅ app.js tag present:", expected);
+        return;
+      }
+      console.log("⚠️ app.js tag missing, injecting:", expected);
+      const s = document.createElement("script");
+      s.src = "./app.js?v=recovery3b";
+      s.onload = () => console.log("✅ app.js loaded (injected)");
+      s.onerror = () => console.log("❌ app.js failed to load (injected)");
+      document.head.appendChild(s);
+    })();
+  </script>
+</body>
 </html>
