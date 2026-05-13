@@ -1,10 +1,10 @@
-/* =========================================
-   CargoWise-ish MVP - app.js (ROBUST LOGIN BINDING)
-   - No module imports
-   - Auto loads Supabase JS if missing
-   - Works regardless of button IDs (auto-detects Login button)
-   - Handles form submit + button click
-   ========================================= */
+/* =========================================================
+   CargoWise-ish MVP - app.js (FIXED FOR btnLogin / YOUR HTML)
+   - No ES module import (works with normal <script src="app.js">)
+   - Auto-loads Supabase JS v2 if not already present
+   - Binds to YOUR actual button IDs (btnLogin etc.)
+   - Adds click-debug so we can see instantly if click is captured
+   ========================================================= */
 
 (function () {
   // -------------------------------
@@ -14,6 +14,9 @@
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 
+  // Bump this if you want to confirm deployment in console quickly
+  const APP_VERSION = "app.js v2026-05-13a (bind btnLogin)";
+
   let supabase = null;
   let currentUser = null;
   let userBranch = null;
@@ -21,26 +24,33 @@
   // -------------------------------
   // HELPERS
   // -------------------------------
-  function $(id) {
+  function byId(id) {
     return document.getElementById(id);
   }
 
   function setStatus(msg, isError = false) {
-    let el = $("status");
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = isError ? "#ff7b7b" : "#9fffb0";
+    // Try common status ids
+    const el =
+      byId("status") ||
+      byId("statusText") ||
+      byId("lblStatus") ||
+      byId("txtStatus");
+
+    if (el) {
+      el.textContent = msg;
+      el.style.color = isError ? "#ff7b7b" : "#9fffb0";
+    } else {
+      // fallback
+      if (isError) console.error(msg);
+      else console.log(msg);
+    }
   }
 
   function ensureStatusElementExists() {
-    if ($("status")) return;
+    if (byId("status") || byId("statusText")) return;
 
-    // Put status under the login button area if possible
-    const loginBtn =
-      $("loginBtn") ||
-      document.querySelector('button[type="submit"], button') ||
-      null;
-
+    // Try to inject a status element under the login button area
+    const loginBtn = byId("btnLogin") || document.querySelector("button");
     if (!loginBtn || !loginBtn.parentElement) return;
 
     const status = document.createElement("div");
@@ -50,13 +60,6 @@
     status.style.opacity = "0.95";
     status.style.wordBreak = "break-word";
     loginBtn.parentElement.appendChild(status);
-  }
-
-  function show(el) {
-    if (el) el.style.display = "";
-  }
-  function hide(el) {
-    if (el) el.style.display = "none";
   }
 
   function loadScript(src) {
@@ -70,22 +73,46 @@
     });
   }
 
+  function getEmailPassword() {
+    // Your HTML might not use id="email"/"password"
+    const emailEl =
+      byId("email") ||
+      byId("txtEmail") ||
+      byId("inpEmail") ||
+      document.querySelector('input[type="email"]') ||
+      document.querySelector('input[name="email"]');
+
+    const passEl =
+      byId("password") ||
+      byId("txtPassword") ||
+      byId("inpPassword") ||
+      document.querySelector('input[type="password"]') ||
+      document.querySelector('input[name="password"]');
+
+    return {
+      email: emailEl ? emailEl.value.trim() : "",
+      password: passEl ? passEl.value : ""
+    };
+  }
+
   // -------------------------------
   // SUPABASE INIT
   // -------------------------------
-  async function initSupabaseClient() {
+  async function initSupabase() {
     ensureStatusElementExists();
 
-    if (!window.supabase) {
+    if (!window.supabase || !window.supabase.createClient) {
       setStatus("Loading Supabase library...");
       await loadScript(SUPABASE_CDN);
     }
+
     if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Supabase library failed to initialize.", true);
+      setStatus("Supabase library failed to load.", true);
       throw new Error("Supabase createClient missing");
     }
 
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log(APP_VERSION);
     setStatus("Ready.");
   }
 
@@ -93,35 +120,32 @@
   // AUTH
   // -------------------------------
   async function signIn() {
-    const emailEl = $("email") || document.querySelector('input[type="email"]');
-    const passEl = $("password") || document.querySelector('input[type="password"]');
+    try {
+      const { email, password } = getEmailPassword();
 
-    const email = emailEl ? emailEl.value.trim() : "";
-    const password = passEl ? passEl.value : "";
+      if (!email || !password) {
+        setStatus("Email and password required.", true);
+        return;
+      }
 
-    if (!email || !password) {
-      setStatus("Email and password required.", true);
-      return;
+      setStatus("Signing in...");
+      console.log("signIn() called with email:", email);
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        setStatus("Login failed: " + error.message, true);
+        console.error("Auth error:", error);
+        return;
+      }
+
+      currentUser = data.user;
+      setStatus("Login success.");
+      await afterLogin();
+    } catch (e) {
+      setStatus("Login crash: " + (e.message || e), true);
+      console.error(e);
     }
-
-    setStatus("Signing in...");
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setStatus("Login failed: " + error.message, true);
-      console.error("Auth error:", error);
-
-      // Helpful hint if key is wrong
-      console.warn(
-        "If error mentions JWT/unauthorized/permission, you may be using the wrong key. Use anon public key (usually starts with eyJ...)."
-      );
-      return;
-    }
-
-    currentUser = data.user;
-    setStatus("Login success.");
-    await afterLogin();
   }
 
   async function signOut() {
@@ -129,12 +153,12 @@
     const { error } = await supabase.auth.signOut();
     if (error) {
       setStatus("Logout failed: " + error.message, true);
+      console.error(error);
       return;
     }
     currentUser = null;
     userBranch = null;
     setStatus("Signed out.");
-    renderAuthState(false);
   }
 
   async function restoreSession() {
@@ -142,6 +166,7 @@
     const { data, error } = await supabase.auth.getSession();
     if (error) {
       setStatus("Session error: " + error.message, true);
+      console.error(error);
       return;
     }
     if (data?.session?.user) {
@@ -149,50 +174,14 @@
       await afterLogin();
     } else {
       setStatus("Ready.");
-      renderAuthState(false);
-    }
-  }
-
-  function renderAuthState(isLoggedIn) {
-    // Optional containers (won't break if missing)
-    const loginCard = $("loginCard");
-    const appCard = $("appCard");
-
-    if (isLoggedIn) {
-      hide(loginCard);
-      show(appCard);
-    } else {
-      show(loginCard);
-      hide(appCard);
     }
   }
 
   // -------------------------------
-  // DATA LOADERS
+  // AFTER LOGIN: LOAD DATA
   // -------------------------------
-  async function loadUserProfile() {
-    if (!currentUser) return;
-
-    const { data, error } = await supabase
-      .from("users")
-      .select("branch_code, role")
-      .eq("id", currentUser.id)
-      .single();
-
-    if (error) {
-      setStatus("User profile error: " + error.message, true);
-      console.error(error);
-      return;
-    }
-
-    userBranch = data?.branch_code || null;
-
-    const branchDropdown = $("branch");
-    if (branchDropdown && userBranch) branchDropdown.value = userBranch;
-  }
-
   async function loadBranches() {
-    const dropdown = $("branch");
+    const dropdown = byId("branch") || byId("ddlBranch");
     if (!dropdown) return;
 
     const { data, error } = await supabase
@@ -216,8 +205,28 @@
     });
   }
 
+  async function loadUserProfile() {
+    if (!currentUser) return;
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("branch_code, role")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (error) {
+      setStatus("User profile error: " + error.message, true);
+      console.error(error);
+      return;
+    }
+
+    userBranch = data?.branch_code || null;
+    const dropdown = byId("branch") || byId("ddlBranch");
+    if (dropdown && userBranch) dropdown.value = userBranch;
+  }
+
   async function loadJobs() {
-    const tbody = $("jobsTableBody");
+    const tbody = byId("jobsTableBody");
     if (!tbody) return;
 
     const { data, error } = await supabase
@@ -246,38 +255,8 @@
     });
   }
 
-  async function createJob() {
-    const country = $("country") ? $("country").value : "";
-    const branch = $("branch") ? $("branch").value : "";
-    const transport = $("transport_mode") ? $("transport_mode").value : "";
-    const jobType = $("job_type") ? $("job_type").value : "";
-    const customer = $("customer") ? $("customer").value : "";
-
-    setStatus("Creating job...");
-
-    const { data, error } = await supabase.rpc("create_job", {
-      p_country_code: country,
-      p_branch_code: branch,
-      p_transport_mode: transport,
-      p_job_type: jobType,
-      p_customer_name: customer,
-    });
-
-    if (error) {
-      setStatus("Create job failed: " + error.message, true);
-      console.error(error);
-      return;
-    }
-
-    setStatus("Job created: " + (data?.job_no || "OK"));
-    await loadJobs();
-  }
-
-  // -------------------------------
-  // AFTER LOGIN
-  // -------------------------------
   async function afterLogin() {
-    renderAuthState(true);
+    setStatus("Loading data...");
     await loadBranches();
     await loadUserProfile();
     await loadJobs();
@@ -285,76 +264,65 @@
   }
 
   // -------------------------------
-  // ROBUST EVENT BINDING (THE FIX)
+  // BIND EVENTS (THIS IS THE FIX)
   // -------------------------------
-  function bindLoginHandlers() {
-    // 1) If there is a form, capture submit
-    const form =
-      document.querySelector("form") ||
-      $("loginForm") ||
-      null;
+  function bindEvents() {
+    // 1) Bind to YOUR actual ID: btnLogin
+    const btnLogin = byId("btnLogin");
+    if (btnLogin) {
+      btnLogin.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("btnLogin clicked");
+        setStatus("Login clicked...");
+        signIn();
+      });
+    }
 
+    // 2) Bind also by button text in case ID changes later
+    document.querySelectorAll("button").forEach((b) => {
+      const t = (b.textContent || "").trim().toLowerCase();
+      if (t === "login" && b !== btnLogin) {
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Login(text) clicked");
+          setStatus("Login clicked...");
+          signIn();
+        });
+      }
+    });
+
+    // 3) Bind form submit (press Enter)
+    const form = document.querySelector("form");
     if (form) {
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log("form submit triggered");
+        setStatus("Submitting...");
         signIn();
       });
     }
 
-    // 2) Try common IDs
-    const loginBtnById = $("loginBtn");
-    if (loginBtnById) {
-      loginBtnById.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        signIn();
-      });
-      return;
-    }
+    // Optional: bind sign out buttons if you want
+    const btnSignOut = byId("btnSignOut");
+    if (btnSignOut) btnSignOut.addEventListener("click", signOut);
 
-    // 3) Auto-detect the login button by text content
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const loginBtn = buttons.find((b) => (b.textContent || "").trim().toLowerCase() === "login");
+    const btnLogout = byId("btnLogout");
+    if (btnLogout) btnLogout.addEventListener("click", signOut);
 
-    if (loginBtn) {
-      loginBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        signIn();
-      });
-    }
-
-    // Expose for inline onclick="login()"
+    // Expose for inline onclick if any
     window.login = signIn;
-  }
-
-  function bindOtherHandlers() {
-    const logoutBtn = $("logoutBtn");
-    if (logoutBtn) logoutBtn.addEventListener("click", signOut);
-
-    const createJobBtn = $("createJobBtn");
-    if (createJobBtn) createJobBtn.addEventListener("click", createJob);
-
-    window.logout = signOut;
-    window.createJob = createJob;
+    window.signOut = signOut;
   }
 
   // -------------------------------
   // INIT
   // -------------------------------
   async function init() {
-    await initSupabaseClient();
-
-    // Bind handlers AFTER DOM exists
-    bindLoginHandlers();
-    bindOtherHandlers();
-
-    // Helpful to see auth state changes
-    supabase.auth.onAuthStateChange((event) => {
-      console.log("Auth event:", event);
-    });
-
+    await initSupabase();
+    bindEvents();
     await restoreSession();
   }
 
