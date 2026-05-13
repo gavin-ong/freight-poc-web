@@ -45,12 +45,22 @@
     .body{padding:18px}
     h2{margin:0 0 12px;font-size:14px}
     label{display:block;opacity:.75;font-size:12px;margin:10px 0 6px}
+
+    /* 🔥 Dark dropdown fix */
+    :root { color-scheme: dark; }
     input,select{
       width:100%;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.10);
-      background:rgba(255,255,255,.07);color:var(--text);padding:0 12px;outline:none
+      background:rgba(255,255,255,.07);color:var(--text);padding:0 12px;outline:none;
+      color-scheme: dark;
     }
+    select option{
+      background:#0b1a33;
+      color:#e9f1ff;
+    }
+
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
     .btnbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
     button{
       cursor:pointer;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.10);
@@ -73,6 +83,12 @@
     th{color:var(--muted);font-weight:900}
     tr:hover{background:rgba(255,255,255,.03)}
     .mono{font-family:var(--mono)}
+
+    /* ✅ Highlight selected job row */
+    tr.job-selected{
+      background: rgba(0,200,150,.18) !important;
+      outline: 1px solid rgba(0,200,150,.45);
+    }
   </style>
 </head>
 
@@ -105,7 +121,7 @@
         <div id="status">Ready.</div>
         <div id="badge"></div>
 
-        <div class="build">BUILD: FREIGHT-MVP-1 (HTML)</div>
+        <div class="build">BUILD: FREIGHT-MVP-2 (HTML)</div>
       </div>
     </div>
 
@@ -177,8 +193,16 @@
 
           <div class="row3">
             <div><label>Charge Code</label><input id="charge_code" placeholder="FRT / DOC / THC"/></div>
-            <div><label>Amount</label><input id="amount" placeholder="100.00"/></div>
+            <div><label>Amount (Total)</label><input id="amount" placeholder="100.00"/></div>
             <div><label>Currency</label><input id="currency" placeholder="USD"/></div>
+          </div>
+
+          <!-- New CargoWise-like fields -->
+          <div class="row4" style="margin-top:10px">
+            <div><label>Qty</label><input id="qty" placeholder="1"/></div>
+            <div><label>UOM</label><input id="uom" placeholder="EA"/></div>
+            <div><label>Rate</label><input id="rate" placeholder="100.00"/></div>
+            <div><label>Description</label><input id="description" placeholder="Optional description"/></div>
           </div>
 
           <div class="row2" style="margin-top:10px">
@@ -199,11 +223,13 @@
           </div>
 
           <table>
-            <thead><tr><th>Code</th><th>Amount</th><th>Currency</th><th>Type</th></tr></thead>
+            <thead>
+              <tr><th>Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Amount</th><th>Currency</th><th>Type</th></tr>
+            </thead>
             <tbody id="chargesTableBody"></tbody>
           </table>
 
-          <div class="build">BUILD: FREIGHT-MVP-1 (UI)</div>
+          <div class="build">BUILD: FREIGHT-MVP-2 (UI)</div>
         </div>
 
       </div>
@@ -211,6 +237,6 @@
 
   </div>
 
-  <script src="./app.js?v=freightmvp1" defer></script>
+  <script src="./app.js?v=freightmvp2" defer></script>
 </body>
 </html>
