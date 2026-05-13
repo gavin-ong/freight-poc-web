@@ -1,5 +1,5 @@
-// If app.js executes, this MUST exist:
-window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) executed");
+// If app.js executed, this MUST exist:
+window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3D (JS) executed");
 
 (function () {
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
@@ -26,7 +26,7 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) exec
     el.style.color = ok ? "#9fffb0" : "#ff7b7b";
   }
 
-  // ✅ FIX: toggle the hidden class properly
+  // Toggle visibility via .hidden class (no blank pages)
   function showApp(loggedIn) {
     const loginCard = $("loginCard");
     const appCard = $("appCard");
@@ -35,7 +35,6 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) exec
 
     if (loginCard) loginCard.classList.toggle("hidden", loggedIn);
     if (appCard) appCard.classList.toggle("hidden", !loggedIn);
-
     if (btnLogin) btnLogin.classList.toggle("hidden", loggedIn);
     if (btnLogout) btnLogout.classList.toggle("hidden", !loggedIn);
   }
@@ -57,7 +56,7 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) exec
   }
 
   async function initSupabase() {
-    console.log("✅ app.js executing: RECOVERY-3C");
+    console.log("✅ app.js executing: RECOVERY-3D");
     status("Loading Supabase JS...");
 
     if (!window.supabase || !window.supabase.createClient) {
@@ -69,7 +68,7 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) exec
     }
 
     client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    window.supabaseClient = client;
+    window.supabaseClient = client; // expose for your console tests
     status("Ready. (JS running)");
   }
 
