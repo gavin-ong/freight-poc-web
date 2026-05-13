@@ -2,18 +2,16 @@
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const BUILD = "BUILD: FREIGHT-MVP-6 (JS) job_id hard-locked";
+  const BUILD = "BUILD: FREIGHT-MVP-7 (JS) charges extended cols";
 
   let client = null;
   let user = null;
-
-  // IMPORTANT: job_id is the ONLY PK in your jobs table
-  let currentJobId = null;
+  let currentJobId = null; // HARD-LOCK: jobs PK is job_id UUID
 
   const $ = (id) => document.getElementById(id);
 
   // ---------- OPS STATUS ----------
-  function ensureOpsPanels() {
+  function ensureOpsStatus() {
     const appCard = $("appCard");
     if (!appCard) return;
     const body = appCard.querySelector(".body") || appCard;
@@ -32,39 +30,16 @@
       body.insertBefore(s, body.firstChild);
       s.textContent = "Ready.";
     }
-
-    if (!$("opsDiag")) {
-      const d = document.createElement("div");
-      d.id = "opsDiag";
-      d.style.margin = "8px 0 14px";
-      d.style.padding = "10px 12px";
-      d.style.borderRadius = "12px";
-      d.style.border = "1px dashed rgba(255,255,255,.18)";
-      d.style.background = "rgba(15,36,70,.35)";
-      d.style.fontSize = "11px";
-      d.style.fontFamily = "ui-monospace, Menlo, Consolas, monospace";
-      d.style.whiteSpace = "pre-wrap";
-      d.style.wordBreak = "break-word";
-      d.style.color = "#9fb6d7";
-      body.insertBefore(d, body.children[1] || null);
-      d.textContent = `${BUILD}\nDIAG: starting...`;
-    }
   }
 
   function status(msg, isErr = false) {
-    ensureOpsPanels();
+    ensureOpsStatus();
     const el = $("opsStatus");
     if (el) {
       el.textContent = msg;
       el.style.color = isErr ? "#ff7b7b" : "#9fffb0";
     }
     console.log(msg);
-  }
-
-  function diag(lines) {
-    ensureOpsPanels();
-    const el = $("opsDiag");
-    if (el) el.textContent = lines.join("\n");
   }
 
   function hardError(msg, errObj) {
@@ -102,6 +77,7 @@
     try {
       console.log(BUILD);
       status("Loading Supabase JS...");
+
       if (!window.supabase || !window.supabase.createClient) {
         await loadScript(SUPABASE_CDN);
       }
@@ -109,6 +85,7 @@
         hardError("Supabase library failed to load (CDN blocked).");
         return;
       }
+
       client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       status("Ready.");
     } catch (e) {
@@ -185,16 +162,16 @@
     (data || []).forEach(b => {
       const country = (b.country_code || "").trim().toUpperCase();
       const branch = (b.branch_code || "").trim().toUpperCase();
-      const opt = document.createElement("option");
 
-      // You said your branch key is SIN / KUL etc (not SGSIN)
-      opt.value = branch; // SIN, KUL, BKK...
-      opt.dataset.country = country; // SG, MY...
+      const opt = document.createElement("option");
+      opt.value = branch; // SIN / KUL etc (as per your definition)
+      opt.dataset.country = country;
       opt.textContent = `${country} - ${branch}`;
       ddl.appendChild(opt);
     });
   }
 
+  // If user profile stores SGSIN, map to SIN
   async function loadDefaultBranchFromProfile() {
     const { data, error } = await client
       .from("users")
@@ -207,18 +184,17 @@
     const ddl = $("branch");
     if (!ddl || !data?.branch_code) return;
 
-    // If your user profile stores SGSIN-style, map by last 3 chars to SIN
     const saved = String(data.branch_code).toUpperCase().trim();
-    const maybeBranch = saved.length > 3 ? saved.slice(-3) : saved;
-    ddl.value = maybeBranch;
+    ddl.value = saved.length > 3 ? saved.slice(-3) : saved;
   }
 
   function getBranchContext() {
     const ddl = $("branch");
     const opt = ddl?.options?.[ddl.selectedIndex];
-    const branch_key = (ddl?.value || "").trim().toUpperCase();       // SIN
-    const country_code = (opt?.dataset?.country || "SG").toUpperCase(); // SG
-    return { branch_key, country_code };
+    return {
+      branch_key: (ddl?.value || "").trim().toUpperCase(),                 // SIN / KUL...
+      country_code: (opt?.dataset?.country || "SG").trim().toUpperCase()   // SG / MY...
+    };
   }
 
   // ---------- Jobs ----------
@@ -234,51 +210,36 @@
 
     if (error) return hardError("jobs blocked: " + error.message, error);
 
-    const rows = data || [];
     tbody.innerHTML = "";
-
-    diag([
-      BUILD,
-      `USER: ${user?.email || "unknown"}`,
-      `JOBS FETCHED: ${rows.length}`,
-      rows.length ? `JOB KEYS SAMPLE: ${Object.keys(rows[0]).slice(0, 25).join(", ")}` : "JOB KEYS SAMPLE: (none)"
-    ]);
-
-    rows.forEach(job => {
-      // HARD-LOCK PK
-      const jid = job.job_id; // <-- your screenshot confirms this is PK
-      if (!jid) return; // skip bad rows
-
-      const jno = job.job_no ?? "";
-      const country = job.country_code ?? job.origin_country ?? "";
-      const branch = job.branch_code ?? job.branch_key ?? "";
-      const mode = job.transport_mode ?? "";
-      const type = job.job_type ?? "";
-      const cust = job.customer_name ?? "";
+    (data || []).forEach(job => {
+      // HARD-LOCK: job_id exists
+      const jid = job.job_id;
+      if (!jid) return;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${jno}</td>
-        <td>${country}</td>
-        <td>${branch}</td>
-        <td>${mode}</td>
-        <td>${type}</td>
-        <td>${cust}</td>
+        <td>${job.job_no ?? ""}</td>
+        <td>${job.country_code ?? job.origin_country ?? ""}</td>
+        <td>${job.branch_code ?? job.branch_key ?? ""}</td>
+        <td>${job.transport_mode ?? ""}</td>
+        <td>${job.job_type ?? ""}</td>
+        <td>${job.customer_name ?? ""}</td>
       `;
 
       tr.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        currentJobId = jid;          // <-- HARD-LOCK
-        setCurrentJob(jno);
+        currentJobId = jid;
+        setCurrentJob(job.job_no ?? "");
         loadCharges();
       }, true);
 
       tbody.appendChild(tr);
     });
 
-    status(`Jobs loaded (${rows.length}).`);
+    status(`Jobs loaded (${(data || []).length}).`);
   }
 
+  // Your RPC signature:
   // create_job(p_branch_key, p_transport_mode, p_job_type, p_customer_name, p_origin_country, p_destination_country, p_incoterm)
   async function createJob() {
     if (!user) return hardError("Not logged in.");
@@ -288,9 +249,7 @@
     const jobType = ($("job_type")?.value || "").trim();
     const customerName = ($("customer")?.value || "").trim();
 
-    const originInput = ($("country")?.value || "").trim().toUpperCase();
-    const originCountry = originInput ? originInput.slice(0, 2) : ctx.country_code;
-
+    const originCountry = (($("country")?.value || "").trim().toUpperCase().slice(0, 2)) || ctx.country_code;
     const destinationCountry = "SG";
     const incoterm = "FOB";
 
@@ -326,7 +285,7 @@
     const { data, error } = await client
       .from("charges")
       .select("*")
-      .eq("job_id", currentJobId)   // <-- HARD-LOCK to job_id relationship
+      .eq("job_id", currentJobId) // confirmed correct
       .order("created_at", { ascending: false });
 
     if (error) return hardError("Charges load failed: " + error.message, error);
@@ -354,17 +313,32 @@
     const currency = ($("currency")?.value || "").trim().toUpperCase();
     const type = ($("charge_type")?.value || "").trim().toUpperCase();
 
+    // Optional extended fields if you later add UI inputs (won't break if missing)
+    const description = ($("description")?.value || "").trim(); // optional input id="description"
+    const qty = parseFloat(($("qty")?.value || "1").trim());     // optional input id="qty"
+    const uom = ($("uom")?.value || "EA").trim().toUpperCase();  // optional input id="uom"
+    const rate = parseFloat(($("rate")?.value || "").trim());    // optional input id="rate"
+
     if (!charge_code || !currency || !type || !Number.isFinite(amount)) {
       return hardError("Invalid charge fields (code/amount/currency/type).");
     }
 
+    // Defaults for extended columns if no UI fields supplied
+    const finalQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
+    const finalRate = Number.isFinite(rate) ? rate : amount; // MVP default
+
     status("Adding charge...");
+
     const { error } = await client.from("charges").insert([{
-      job_id: currentJobId,        // <-- HARD-LOCK
+      job_id: currentJobId,
       charge_code,
       amount,
       currency,
-      type
+      type,
+      description: description || "",
+      qty: finalQty,
+      uom: uom || "EA",
+      rate: finalRate
     }]);
 
     if (error) return hardError("Add charge failed: " + error.message, error);
@@ -375,7 +349,7 @@
 
   // ---------- After Login ----------
   async function afterLogin() {
-    ensureOpsPanels();
+    ensureOpsStatus();
     status("Loading data...");
     await loadBranches();
     await loadDefaultBranchFromProfile();
@@ -404,7 +378,7 @@
 
   // ---------- Init ----------
   document.addEventListener("DOMContentLoaded", async () => {
-    ensureOpsPanels();
+    ensureOpsStatus();
     await initSupabase();
     if (!client) return;
     wire();
