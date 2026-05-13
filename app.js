@@ -1,223 +1,366 @@
-// ===============================
-// SUPABASE CONFIG (YOUR KEYS)
-// ===============================
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+/* =========================================
+   CargoWise-ish MVP - app.js (NO MODULE IMPORTS)
+   - Auto loads Supabase JS if missing
+   - Login / Logout / Session restore
+   - After login: load branches, user profile, jobs
+   ========================================= */
 
-const supabaseUrl = "https://quzputmmabgcfmegarvd.supabase.co";
-const supabaseKey = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
-const supabase = createClient(supabaseUrl, supabaseKey);
+(function () {
+  // -------------------------------
+  // CONFIG (YOUR URL + KEY)
+  // -------------------------------
+  const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO"; // may need anon key (eyJ...)
+  const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 
-// ===============================
-// GLOBAL STATE
-// ===============================
-let currentUser = null;
-let userBranch = null;
+  let supabase = null;
+  let currentUser = null;
+  let userBranch = null;
 
-// ===============================
-// AUTH - GET CURRENT USER
-// ===============================
-async function getCurrentUser() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    console.error("Auth error:", error);
-    return null;
-  }
-  return data.user;
-}
-
-// ===============================
-// LOAD USER PROFILE (branch, role)
-// ===============================
-async function loadUserProfile() {
-  currentUser = await getCurrentUser();
-  if (!currentUser) return;
-
-  const { data, error } = await supabase
-    .from("users")
-    .select("branch_code, role")
-    .eq("id", currentUser.id)
-    .single();
-
-  if (error) {
-    console.error("User profile error:", error);
-    return;
+  // -------------------------------
+  // HELPERS (UI)
+  // -------------------------------
+  function $(id) {
+    return document.getElementById(id);
   }
 
-  userBranch = data.branch_code;
-
-  // set default branch dropdown
-  const branchDropdown = document.getElementById("branch");
-  if (branchDropdown && userBranch) {
-    branchDropdown.value = userBranch;
-  }
-}
-
-// ===============================
-// LOAD BRANCHES (AUTOLOAD + SORT)
-// ===============================
-async function loadBranches() {
-  const { data, error } = await supabase
-    .from("branches")
-    .select("country_code, branch_code")
-    .order("country_code", { ascending: true })
-    .order("branch_code", { ascending: true });
-
-  if (error) {
-    console.error("Branch load error:", error);
-    return;
-  }
-
-  const dropdown = document.getElementById("branch");
-  if (!dropdown) return;
-
-  dropdown.innerHTML = "";
-
-  data.forEach((b) => {
-    const option = document.createElement("option");
-    option.value = b.branch_code;
-    option.textContent = `${b.country_code} - ${b.branch_code}`;
-    dropdown.appendChild(option);
-  });
-}
-
-// ===============================
-// LOAD JOBS
-// ===============================
-async function loadJobs() {
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Jobs load error:", error);
-    return;
-  }
-
-  const table = document.getElementById("jobsTableBody");
-  if (!table) return;
-
-  table.innerHTML = "";
-
-  data.forEach((job) => {
-    const row = document.createElement("tr");
-
-    row.innerHTML = `
-      <td>${job.job_no}</td>
-      <td>${job.country_code}</td>
-      <td>${job.branch_code}</td>
-      <td>${job.transport_mode}</td>
-      <td>${job.job_type}</td>
-      <td>${job.customer_name || ""}</td>
-    `;
-
-    table.appendChild(row);
-  });
-}
-
-// ===============================
-// CREATE JOB (RPC)
-// ===============================
-async function createJob() {
-  const country = document.getElementById("country").value;
-  const branch = document.getElementById("branch").value;
-  const transport = document.getElementById("transport_mode").value;
-  const jobType = document.getElementById("job_type").value;
-  const customer = document.getElementById("customer").value;
-
-  const { data, error } = await supabase.rpc("create_job", {
-    p_country_code: country,
-    p_branch_code: branch,
-    p_transport_mode: transport,
-    p_job_type: jobType,
-    p_customer_name: customer
-  });
-
-  if (error) {
-    alert("Create job failed: " + error.message);
-    console.error(error);
-    return;
-  }
-
-  alert("Job Created: " + data.job_no);
-  loadJobs();
-}
-
-// ===============================
-// LOAD CHARGES (BY JOB)
-// ===============================
-async function loadCharges(job_id) {
-  const { data, error } = await supabase
-    .from("charges")
-    .select("*")
-    .eq("job_id", job_id);
-
-  if (error) {
-    console.error("Charges load error:", error);
-    return;
-  }
-
-  const table = document.getElementById("chargesTableBody");
-  if (!table) return;
-
-  table.innerHTML = "";
-
-  data.forEach((c) => {
-    const row = document.createElement("tr");
-
-    row.innerHTML = `
-      <td>${c.charge_code}</td>
-      <td>${c.amount}</td>
-      <td>${c.currency}</td>
-      <td>${c.type}</td>
-    `;
-
-    table.appendChild(row);
-  });
-}
-
-// ===============================
-// ADD CHARGE (MULTI CURRENCY SAFE)
-// ===============================
-async function addCharge(job_id) {
-  const chargeCode = document.getElementById("charge_code").value;
-  const amount = parseFloat(document.getElementById("amount").value);
-  const currency = document.getElementById("currency").value;
-  const type = document.getElementById("charge_type").value;
-
-  const { error } = await supabase.from("charges").insert([
-    {
-      job_id: job_id,
-      charge_code: chargeCode,
-      amount: amount,
-      currency: currency,
-      type: type
+  function setStatus(msg, isError = false) {
+    const el = $("status");
+    if (!el) {
+      // fallback to alert if no status element exists
+      if (isError) console.error(msg);
+      return;
     }
-  ]);
-
-  if (error) {
-    alert("Charge insert failed: " + error.message);
-    console.error(error);
-    return;
+    el.textContent = msg;
+    el.style.color = isError ? "#ff7b7b" : "#9fffb0";
   }
 
-  loadCharges(job_id);
-}
+  function show(el) {
+    if (el) el.style.display = "";
+  }
 
-// ===============================
-// INIT APP
-// ===============================
-async function init() {
-  await loadBranches();
-  await loadUserProfile();
-  await loadJobs();
-}
+  function hide(el) {
+    if (el) el.style.display = "none";
+  }
 
-init();
+  function ensureStatusElementExists() {
+    // If your HTML doesn't have <div id="status"></div>, we inject one under the login button
+    if ($("status")) return;
 
-// ===============================
-// EXPOSE FUNCTIONS TO HTML
-// ===============================
-window.createJob = createJob;
-window.addCharge = addCharge;
-``
+    const loginBtn = $("loginBtn") || document.querySelector('button[type="button"], button');
+    if (!loginBtn) return;
+
+    const status = document.createElement("div");
+    status.id = "status";
+    status.style.marginTop = "10px";
+    status.style.fontSize = "12px";
+    status.style.opacity = "0.95";
+    status.style.wordBreak = "break-word";
+    loginBtn.parentElement.appendChild(status);
+  }
+
+  // -------------------------------
+  // LOAD SUPABASE LIB IF NEEDED
+  // -------------------------------
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = true;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function initSupabaseClient() {
+    ensureStatusElementExists();
+
+    if (!window.supabase) {
+      setStatus("Loading Supabase library...");
+      try {
+        await loadScript(SUPABASE_CDN);
+      } catch (e) {
+        setStatus("Failed to load Supabase JS library. Check internet/CDN.", true);
+        throw e;
+      }
+    }
+
+    if (!window.supabase || !window.supabase.createClient) {
+      setStatus("Supabase library loaded but createClient is missing.", true);
+      throw new Error("Supabase createClient missing");
+    }
+
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    setStatus("Supabase client ready.");
+  }
+
+  // -------------------------------
+  // AUTH
+  // -------------------------------
+  async function signIn() {
+    const emailEl = $("email");
+    const passEl = $("password");
+
+    const email = emailEl ? emailEl.value.trim() : "";
+    const password = passEl ? passEl.value : "";
+
+    if (!email || !password) {
+      setStatus("Email and password required.", true);
+      return;
+    }
+
+    setStatus("Signing in...");
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      // Most useful message you can see immediately
+      setStatus("Login failed: " + error.message, true);
+
+      // Strong hint if key is wrong
+      if (
+        String(error.message || "").toLowerCase().includes("invalid") ||
+        String(error.message || "").toLowerCase().includes("jwt") ||
+        String(error.message || "").toLowerCase().includes("unauthorized") ||
+        String(error.message || "").toLowerCase().includes("permission")
+      ) {
+        console.warn("Possible wrong API key. Many projects require anon/public key (often starts with eyJ...).");
+      }
+
+      console.error("Auth error:", error);
+      return;
+    }
+
+    currentUser = data.user;
+    setStatus("Login success.");
+    await afterLogin();
+  }
+
+  async function signOut() {
+    setStatus("Signing out...");
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setStatus("Logout failed: " + error.message, true);
+      return;
+    }
+    currentUser = null;
+    userBranch = null;
+    setStatus("Signed out.");
+    renderAuthState(false);
+  }
+
+  async function restoreSession() {
+    setStatus("Restoring session...");
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      setStatus("Session restore error: " + error.message, true);
+      return;
+    }
+
+    if (data && data.session && data.session.user) {
+      currentUser = data.session.user;
+      setStatus("Session restored.");
+      await afterLogin();
+    } else {
+      setStatus("No session. Please login.");
+      renderAuthState(false);
+    }
+  }
+
+  function renderAuthState(isLoggedIn) {
+    // These containers depend on your index.html ids.
+    // If your HTML doesn't have them, nothing breaks.
+    const loginCard = $("loginCard");
+    const appCard = $("appCard");
+
+    if (isLoggedIn) {
+      hide(loginCard);
+      show(appCard);
+    } else {
+      show(loginCard);
+      hide(appCard);
+    }
+  }
+
+  // -------------------------------
+  // LOAD USER PROFILE (branch, role)
+  // -------------------------------
+  async function loadUserProfile() {
+    if (!currentUser) return;
+
+    // You said you have a "users" table with id, branch_code, role
+    const { data, error } = await supabase
+      .from("users")
+      .select("branch_code, role")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (error) {
+      setStatus("User profile error: " + error.message, true);
+      console.error(error);
+      return;
+    }
+
+    userBranch = data.branch_code || null;
+
+    // default branch dropdown
+    const branchDropdown = $("branch");
+    if (branchDropdown && userBranch) {
+      branchDropdown.value = userBranch;
+    }
+  }
+
+  // -------------------------------
+  // LOAD BRANCHES
+  // -------------------------------
+  async function loadBranches() {
+    const dropdown = $("branch");
+    if (!dropdown) return;
+
+    const { data, error } = await supabase
+      .from("branches")
+      .select("country_code, branch_code")
+      .order("country_code", { ascending: true })
+      .order("branch_code", { ascending: true });
+
+    if (error) {
+      setStatus("Branch load error: " + error.message, true);
+      console.error(error);
+      return;
+    }
+
+    dropdown.innerHTML = "";
+
+    (data || []).forEach((b) => {
+      const opt = document.createElement("option");
+      opt.value = b.branch_code;
+      opt.textContent = `${b.country_code} - ${b.branch_code}`;
+      dropdown.appendChild(opt);
+    });
+  }
+
+  // -------------------------------
+  // JOBS
+  // -------------------------------
+  async function loadJobs() {
+    const tbody = $("jobsTableBody");
+    if (!tbody) return;
+
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setStatus("Jobs load error: " + error.message, true);
+      console.error(error);
+      return;
+    }
+
+    tbody.innerHTML = "";
+
+    (data || []).forEach((job) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${job.job_no ?? ""}</td>
+        <td>${job.country_code ?? ""}</td>
+        <td>${job.branch_code ?? ""}</td>
+        <td>${job.transport_mode ?? ""}</td>
+        <td>${job.job_type ?? ""}</td>
+        <td>${job.customer_name ?? ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function createJob() {
+    const country = $("country") ? $("country").value : "";
+    const branch = $("branch") ? $("branch").value : "";
+    const transport = $("transport_mode") ? $("transport_mode").value : "";
+    const jobType = $("job_type") ? $("job_type").value : "";
+    const customer = $("customer") ? $("customer").value : "";
+
+    setStatus("Creating job...");
+
+    const { data, error } = await supabase.rpc("create_job", {
+      p_country_code: country,
+      p_branch_code: branch,
+      p_transport_mode: transport,
+      p_job_type: jobType,
+      p_customer_name: customer,
+    });
+
+    if (error) {
+      setStatus("Create job failed: " + error.message, true);
+      console.error(error);
+      return;
+    }
+
+    setStatus("Job created: " + (data && data.job_no ? data.job_no : "OK"));
+    await loadJobs();
+  }
+
+  // -------------------------------
+  // AFTER LOGIN
+  // -------------------------------
+  async function afterLogin() {
+    renderAuthState(true);
+
+    // Load in correct order
+    await loadBranches();
+    await loadUserProfile(); // sets default branch
+    await loadJobs();
+
+    setStatus("Ready.");
+  }
+
+  // -------------------------------
+  // WIRE BUTTONS
+  // -------------------------------
+  function wireEvents() {
+    // If your login button has id="loginBtn", we hook it.
+    const loginBtn = $("loginBtn");
+    if (loginBtn) loginBtn.addEventListener("click", signIn);
+
+    const logoutBtn = $("logoutBtn");
+    if (logoutBtn) logoutBtn.addEventListener("click", signOut);
+
+    const createJobBtn = $("createJobBtn");
+    if (createJobBtn) createJobBtn.addEventListener("click", createJob);
+
+    // Also expose for inline onclick="..."
+    window.login = signIn;
+    window.logout = signOut;
+    window.createJob = createJob;
+  }
+
+  // -------------------------------
+  // INIT
+  // -------------------------------
+  async function init() {
+    await initSupabaseClient();
+    wireEvents();
+
+    // listen auth changes
+    supabase.auth.onAuthStateChange((event, session) => {
+      // Useful during testing:
+      console.log("Auth event:", event);
+      if (session && session.user) {
+        currentUser = session.user;
+      } else {
+        currentUser = null;
+      }
+    });
+
+    await restoreSession();
+  }
+
+  // Start
+  document.addEventListener("DOMContentLoaded", () => {
+    init().catch((e) => {
+      console.error(e);
+      setStatus("Init failed: " + (e.message || e), true);
+    });
+  });
+})();
