@@ -1,8 +1,11 @@
+// If app.js executes, this MUST exist:
+window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) executed");
+
 (function () {
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const BUILD = "BUILD: RECOVERY-3 (JS)";
+  const BUILD = "RECOVERY-3B (JS)";
 
   let client = null;
   let user = null;
@@ -48,7 +51,9 @@
   }
 
   async function initSupabase() {
+    console.log("✅ app.js executing:", BUILD);
     status("Loading Supabase JS...");
+
     if (!window.supabase || !window.supabase.createClient) {
       await loadScript(SUPABASE_CDN);
     }
@@ -56,10 +61,10 @@
       status("Supabase CDN blocked / failed to load.", true);
       return;
     }
+
     client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.supabaseClient = client;
-    console.log(BUILD);
-    status("Ready.");
+    status("Ready. (JS running)");
   }
 
   function creds() {
@@ -67,6 +72,8 @@
   }
 
   async function signIn() {
+    if (!client) return status("Supabase client not ready.", true);
+
     const { email, password } = creds();
     if (!email || !password) return status("Email/password required.", true);
 
@@ -87,6 +94,7 @@
     status("Signing out...");
     const { error } = await client.auth.signOut();
     if (error) return status("Logout failed: " + error.message, true);
+
     user = null;
     currentJobId = null;
     setCurrentJob(null);
@@ -111,7 +119,7 @@
 
   async function loadBranches() {
     const ddl = $("branch");
-    if (!ddl) return status("UI missing #branch (still on old HTML).", true);
+    if (!ddl) return status("UI missing #branch (wrong HTML).", true);
 
     const { data, error } = await client
       .from("branches")
@@ -145,7 +153,7 @@
 
   async function loadJobs() {
     const tbody = $("jobsTableBody");
-    if (!tbody) return status("UI missing #jobsTableBody (still on old HTML).", true);
+    if (!tbody) return status("UI missing #jobsTableBody.", true);
 
     const { data, error } = await client.from("jobs").select("*").order("created_at", { ascending: false });
     if (error) return status("jobs blocked: " + error.message, true);
@@ -155,6 +163,7 @@
       const tr = document.createElement("tr");
       const jid = job.job_id ?? job.id ?? null;
       const jno = job.job_no ?? "";
+
       tr.innerHTML = `
         <td>${job.job_no ?? ""}</td>
         <td>${job.country_code ?? ""}</td>
@@ -163,12 +172,14 @@
         <td>${job.job_type ?? ""}</td>
         <td>${job.customer_name ?? ""}</td>
       `;
+
       tr.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         currentJobId = jid;
         setCurrentJob(jno);
         loadCharges();
       }, true);
+
       tbody.appendChild(tr);
     });
   }
@@ -264,7 +275,7 @@
       if (e.key === "Enter" && !user) { e.preventDefault(); signIn(); }
     });
 
-    window.__cw_ping = () => console.log(BUILD);
+    window.__cw_login = signIn;
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
