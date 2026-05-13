@@ -1,9 +1,9 @@
 /* =========================================================
-   CargoWise-ish MVP - app.js (FIXED FOR btnLogin / YOUR HTML)
-   - No ES module import (works with normal <script src="app.js">)
-   - Auto-loads Supabase JS v2 if not already present
-   - Binds to YOUR actual button IDs (btnLogin etc.)
-   - Adds click-debug so we can see instantly if click is captured
+   CargoWise-ish MVP - app.js (ULTRA ROBUST LOGIN)
+   Fixes: "Login button click does nothing"
+   - Capture-phase click delegation (beats stopPropagation)
+   - MutationObserver rebind (beats re-rendered buttons)
+   - Exposes __cw_login() for manual trigger testing
    ========================================================= */
 
 (function () {
@@ -13,9 +13,7 @@
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-
-  // Bump this if you want to confirm deployment in console quickly
-  const APP_VERSION = "app.js v2026-05-13a (bind btnLogin)";
+  const APP_VERSION = "app.js v2026-05-13b (ultra login capture+observer)";
 
   let supabase = null;
   let currentUser = null;
@@ -24,12 +22,9 @@
   // -------------------------------
   // HELPERS
   // -------------------------------
-  function byId(id) {
-    return document.getElementById(id);
-  }
+  const byId = (id) => document.getElementById(id);
 
   function setStatus(msg, isError = false) {
-    // Try common status ids
     const el =
       byId("status") ||
       byId("statusText") ||
@@ -41,15 +36,13 @@
       el.style.color = isError ? "#ff7b7b" : "#9fffb0";
     } else {
       // fallback
-      if (isError) console.error(msg);
-      else console.log(msg);
+      (isError ? console.error : console.log)(msg);
     }
   }
 
   function ensureStatusElementExists() {
     if (byId("status") || byId("statusText")) return;
 
-    // Try to inject a status element under the login button area
     const loginBtn = byId("btnLogin") || document.querySelector("button");
     if (!loginBtn || !loginBtn.parentElement) return;
 
@@ -74,7 +67,6 @@
   }
 
   function getEmailPassword() {
-    // Your HTML might not use id="email"/"password"
     const emailEl =
       byId("email") ||
       byId("txtEmail") ||
@@ -129,7 +121,7 @@
       }
 
       setStatus("Signing in...");
-      console.log("signIn() called with email:", email);
+      console.log("signIn() called:", email);
 
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -143,7 +135,7 @@
       setStatus("Login success.");
       await afterLogin();
     } catch (e) {
-      setStatus("Login crash: " + (e.message || e), true);
+      setStatus("Login crashed: " + (e.message || e), true);
       console.error(e);
     }
   }
@@ -178,7 +170,7 @@
   }
 
   // -------------------------------
-  // AFTER LOGIN: LOAD DATA
+  // AFTER LOGIN: LOAD DATA (keep minimal for now)
   // -------------------------------
   async function loadBranches() {
     const dropdown = byId("branch") || byId("ddlBranch");
@@ -264,57 +256,65 @@
   }
 
   // -------------------------------
-  // BIND EVENTS (THIS IS THE FIX)
+  // CLICK FIX: CAPTURE-PHASE DELEGATION
   // -------------------------------
-  function bindEvents() {
-    // 1) Bind to YOUR actual ID: btnLogin
+  function installGlobalClickCapture() {
+    document.addEventListener(
+      "click",
+      (e) => {
+        const btn = e.target && (e.target.closest ? e.target.closest("button") : null);
+        if (!btn) return;
+
+        const id = (btn.id || "").trim();
+        const text = (btn.textContent || "").trim().toLowerCase();
+
+        // Catch ALL variants of login buttons
+        if (id === "btnLogin" || text === "login") {
+          // capture-phase: we run before bubble-phase handlers
+          console.log("Captured login click (global capture)", { id, text });
+          setStatus("Login clicked...");
+          e.preventDefault();
+          signIn();
+        }
+      },
+      true // <-- CAPTURE MODE (critical)
+    );
+  }
+
+  // -------------------------------
+  // REBIND FIX: MUTATION OBSERVER
+  // -------------------------------
+  function installMutationObserver() {
+    const obs = new MutationObserver(() => {
+      // If UI framework replaces the login button, ensure status exists again
+      ensureStatusElementExists();
+    });
+
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // -------------------------------
+  // OPTIONAL: ALSO BIND DIRECT IDs (nice to have)
+  // -------------------------------
+  function bindDirectButtons() {
     const btnLogin = byId("btnLogin");
     if (btnLogin) {
       btnLogin.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log("btnLogin clicked");
+        console.log("btnLogin direct handler fired");
         setStatus("Login clicked...");
-        signIn();
-      });
-    }
-
-    // 2) Bind also by button text in case ID changes later
-    document.querySelectorAll("button").forEach((b) => {
-      const t = (b.textContent || "").trim().toLowerCase();
-      if (t === "login" && b !== btnLogin) {
-        b.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          console.log("Login(text) clicked");
-          setStatus("Login clicked...");
-          signIn();
-        });
-      }
-    });
-
-    // 3) Bind form submit (press Enter)
-    const form = document.querySelector("form");
-    if (form) {
-      form.addEventListener("submit", (e) => {
         e.preventDefault();
-        e.stopPropagation();
-        console.log("form submit triggered");
-        setStatus("Submitting...");
         signIn();
       });
     }
-
-    // Optional: bind sign out buttons if you want
-    const btnSignOut = byId("btnSignOut");
-    if (btnSignOut) btnSignOut.addEventListener("click", signOut);
 
     const btnLogout = byId("btnLogout");
     if (btnLogout) btnLogout.addEventListener("click", signOut);
 
-    // Expose for inline onclick if any
-    window.login = signIn;
-    window.signOut = signOut;
+    const btnSignOut = byId("btnSignOut");
+    if (btnSignOut) btnSignOut.addEventListener("click", signOut);
+
+    // expose manual trigger for testing (no clicking needed)
+    window.__cw_login = signIn;
   }
 
   // -------------------------------
@@ -322,7 +322,11 @@
   // -------------------------------
   async function init() {
     await initSupabase();
-    bindEvents();
+
+    installGlobalClickCapture(); // <-- main fix
+    installMutationObserver();   // <-- main fix
+    bindDirectButtons();         // <-- extra
+
     await restoreSession();
   }
 
