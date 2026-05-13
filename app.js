@@ -1,8 +1,9 @@
 /* =========================================
-   CargoWise-ish MVP - app.js (NO MODULE IMPORTS)
+   CargoWise-ish MVP - app.js (ROBUST LOGIN BINDING)
+   - No module imports
    - Auto loads Supabase JS if missing
-   - Login / Logout / Session restore
-   - After login: load branches, user profile, jobs
+   - Works regardless of button IDs (auto-detects Login button)
+   - Handles form submit + button click
    ========================================= */
 
 (function () {
@@ -10,7 +11,7 @@
   // CONFIG (YOUR URL + KEY)
   // -------------------------------
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO"; // may need anon key (eyJ...)
+  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 
   let supabase = null;
@@ -18,37 +19,29 @@
   let userBranch = null;
 
   // -------------------------------
-  // HELPERS (UI)
+  // HELPERS
   // -------------------------------
   function $(id) {
     return document.getElementById(id);
   }
 
   function setStatus(msg, isError = false) {
-    const el = $("status");
-    if (!el) {
-      // fallback to alert if no status element exists
-      if (isError) console.error(msg);
-      return;
-    }
+    let el = $("status");
+    if (!el) return;
     el.textContent = msg;
     el.style.color = isError ? "#ff7b7b" : "#9fffb0";
   }
 
-  function show(el) {
-    if (el) el.style.display = "";
-  }
-
-  function hide(el) {
-    if (el) el.style.display = "none";
-  }
-
   function ensureStatusElementExists() {
-    // If your HTML doesn't have <div id="status"></div>, we inject one under the login button
     if ($("status")) return;
 
-    const loginBtn = $("loginBtn") || document.querySelector('button[type="button"], button');
-    if (!loginBtn) return;
+    // Put status under the login button area if possible
+    const loginBtn =
+      $("loginBtn") ||
+      document.querySelector('button[type="submit"], button') ||
+      null;
+
+    if (!loginBtn || !loginBtn.parentElement) return;
 
     const status = document.createElement("div");
     status.id = "status";
@@ -59,9 +52,13 @@
     loginBtn.parentElement.appendChild(status);
   }
 
-  // -------------------------------
-  // LOAD SUPABASE LIB IF NEEDED
-  // -------------------------------
+  function show(el) {
+    if (el) el.style.display = "";
+  }
+  function hide(el) {
+    if (el) el.style.display = "none";
+  }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -73,34 +70,31 @@
     });
   }
 
+  // -------------------------------
+  // SUPABASE INIT
+  // -------------------------------
   async function initSupabaseClient() {
     ensureStatusElementExists();
 
     if (!window.supabase) {
       setStatus("Loading Supabase library...");
-      try {
-        await loadScript(SUPABASE_CDN);
-      } catch (e) {
-        setStatus("Failed to load Supabase JS library. Check internet/CDN.", true);
-        throw e;
-      }
+      await loadScript(SUPABASE_CDN);
     }
-
     if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Supabase library loaded but createClient is missing.", true);
+      setStatus("Supabase library failed to initialize.", true);
       throw new Error("Supabase createClient missing");
     }
 
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    setStatus("Supabase client ready.");
+    setStatus("Ready.");
   }
 
   // -------------------------------
   // AUTH
   // -------------------------------
   async function signIn() {
-    const emailEl = $("email");
-    const passEl = $("password");
+    const emailEl = $("email") || document.querySelector('input[type="email"]');
+    const passEl = $("password") || document.querySelector('input[type="password"]');
 
     const email = emailEl ? emailEl.value.trim() : "";
     const password = passEl ? passEl.value : "";
@@ -115,20 +109,13 @@
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      // Most useful message you can see immediately
       setStatus("Login failed: " + error.message, true);
-
-      // Strong hint if key is wrong
-      if (
-        String(error.message || "").toLowerCase().includes("invalid") ||
-        String(error.message || "").toLowerCase().includes("jwt") ||
-        String(error.message || "").toLowerCase().includes("unauthorized") ||
-        String(error.message || "").toLowerCase().includes("permission")
-      ) {
-        console.warn("Possible wrong API key. Many projects require anon/public key (often starts with eyJ...).");
-      }
-
       console.error("Auth error:", error);
+
+      // Helpful hint if key is wrong
+      console.warn(
+        "If error mentions JWT/unauthorized/permission, you may be using the wrong key. Use anon public key (usually starts with eyJ...)."
+      );
       return;
     }
 
@@ -151,26 +138,23 @@
   }
 
   async function restoreSession() {
-    setStatus("Restoring session...");
+    setStatus("Checking session...");
     const { data, error } = await supabase.auth.getSession();
     if (error) {
-      setStatus("Session restore error: " + error.message, true);
+      setStatus("Session error: " + error.message, true);
       return;
     }
-
-    if (data && data.session && data.session.user) {
+    if (data?.session?.user) {
       currentUser = data.session.user;
-      setStatus("Session restored.");
       await afterLogin();
     } else {
-      setStatus("No session. Please login.");
+      setStatus("Ready.");
       renderAuthState(false);
     }
   }
 
   function renderAuthState(isLoggedIn) {
-    // These containers depend on your index.html ids.
-    // If your HTML doesn't have them, nothing breaks.
+    // Optional containers (won't break if missing)
     const loginCard = $("loginCard");
     const appCard = $("appCard");
 
@@ -184,12 +168,11 @@
   }
 
   // -------------------------------
-  // LOAD USER PROFILE (branch, role)
+  // DATA LOADERS
   // -------------------------------
   async function loadUserProfile() {
     if (!currentUser) return;
 
-    // You said you have a "users" table with id, branch_code, role
     const { data, error } = await supabase
       .from("users")
       .select("branch_code, role")
@@ -202,18 +185,12 @@
       return;
     }
 
-    userBranch = data.branch_code || null;
+    userBranch = data?.branch_code || null;
 
-    // default branch dropdown
     const branchDropdown = $("branch");
-    if (branchDropdown && userBranch) {
-      branchDropdown.value = userBranch;
-    }
+    if (branchDropdown && userBranch) branchDropdown.value = userBranch;
   }
 
-  // -------------------------------
-  // LOAD BRANCHES
-  // -------------------------------
   async function loadBranches() {
     const dropdown = $("branch");
     if (!dropdown) return;
@@ -231,7 +208,6 @@
     }
 
     dropdown.innerHTML = "";
-
     (data || []).forEach((b) => {
       const opt = document.createElement("option");
       opt.value = b.branch_code;
@@ -240,9 +216,6 @@
     });
   }
 
-  // -------------------------------
-  // JOBS
-  // -------------------------------
   async function loadJobs() {
     const tbody = $("jobsTableBody");
     if (!tbody) return;
@@ -259,7 +232,6 @@
     }
 
     tbody.innerHTML = "";
-
     (data || []).forEach((job) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -297,7 +269,7 @@
       return;
     }
 
-    setStatus("Job created: " + (data && data.job_no ? data.job_no : "OK"));
+    setStatus("Job created: " + (data?.job_no || "OK"));
     await loadJobs();
   }
 
@@ -306,31 +278,64 @@
   // -------------------------------
   async function afterLogin() {
     renderAuthState(true);
-
-    // Load in correct order
     await loadBranches();
-    await loadUserProfile(); // sets default branch
+    await loadUserProfile();
     await loadJobs();
-
     setStatus("Ready.");
   }
 
   // -------------------------------
-  // WIRE BUTTONS
+  // ROBUST EVENT BINDING (THE FIX)
   // -------------------------------
-  function wireEvents() {
-    // If your login button has id="loginBtn", we hook it.
-    const loginBtn = $("loginBtn");
-    if (loginBtn) loginBtn.addEventListener("click", signIn);
+  function bindLoginHandlers() {
+    // 1) If there is a form, capture submit
+    const form =
+      document.querySelector("form") ||
+      $("loginForm") ||
+      null;
 
+    if (form) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        signIn();
+      });
+    }
+
+    // 2) Try common IDs
+    const loginBtnById = $("loginBtn");
+    if (loginBtnById) {
+      loginBtnById.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        signIn();
+      });
+      return;
+    }
+
+    // 3) Auto-detect the login button by text content
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const loginBtn = buttons.find((b) => (b.textContent || "").trim().toLowerCase() === "login");
+
+    if (loginBtn) {
+      loginBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        signIn();
+      });
+    }
+
+    // Expose for inline onclick="login()"
+    window.login = signIn;
+  }
+
+  function bindOtherHandlers() {
     const logoutBtn = $("logoutBtn");
     if (logoutBtn) logoutBtn.addEventListener("click", signOut);
 
     const createJobBtn = $("createJobBtn");
     if (createJobBtn) createJobBtn.addEventListener("click", createJob);
 
-    // Also expose for inline onclick="..."
-    window.login = signIn;
     window.logout = signOut;
     window.createJob = createJob;
   }
@@ -340,23 +345,19 @@
   // -------------------------------
   async function init() {
     await initSupabaseClient();
-    wireEvents();
 
-    // listen auth changes
-    supabase.auth.onAuthStateChange((event, session) => {
-      // Useful during testing:
+    // Bind handlers AFTER DOM exists
+    bindLoginHandlers();
+    bindOtherHandlers();
+
+    // Helpful to see auth state changes
+    supabase.auth.onAuthStateChange((event) => {
       console.log("Auth event:", event);
-      if (session && session.user) {
-        currentUser = session.user;
-      } else {
-        currentUser = null;
-      }
     });
 
     await restoreSession();
   }
 
-  // Start
   document.addEventListener("DOMContentLoaded", () => {
     init().catch((e) => {
       console.error(e);
