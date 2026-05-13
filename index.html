@@ -1,625 +1,308 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CargoWise-ish MVP (Supabase)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CargoWise-ish MVP</title>
 
-  <!-- Supabase JS (v2) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+  <!-- CW-MVP BUILD: 2026-05-13e -->
   <style>
     :root{
-      --bg:#0b1220;
-      --card:#101a33;
-      --card2:#0f1930;
-      --text:#e7ecff;
-      --muted:#a7b2d6;
-      --line: rgba(255,255,255,.10);
-      --accent:#7aa2ff;
-      --good:#43d19e;
-      --warn:#ffcc66;
-      --bad:#ff6b6b;
-      --chip:#1a2a54;
-      --shadow: 0 12px 30px rgba(0,0,0,.35);
+      --bg1:#071224;
+      --bg2:#0a2a45;
+      --card:#0b1a33cc;
+      --border:#1e3a5f;
+      --text:#e9f1ff;
+      --muted:#9fb6d7;
+      --ok:#9fffb0;
+      --err:#ff7b7b;
+      --shadow:0 20px 60px rgba(0,0,0,.45);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
     }
-    *{ box-sizing:border-box; }
+    *{box-sizing:border-box}
     body{
       margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      background: radial-gradient(1200px 700px at 10% 0%, #1a2a54 0%, var(--bg) 60%);
+      font-family:var(--sans);
       color:var(--text);
+      min-height:100vh;
+      background:
+        radial-gradient(900px 500px at 20% 30%, rgba(35,110,255,.35), transparent 60%),
+        radial-gradient(800px 500px at 75% 70%, rgba(0,255,225,.18), transparent 55%),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:54px 16px;
     }
-    a{ color:var(--accent); }
-    .container{ max-width:1200px; margin:0 auto; padding:18px; }
-    .topbar{
-      display:flex; align-items:center; justify-content:space-between;
-      gap:12px; padding:14px 16px; border:1px solid var(--line);
-      border-radius:16px; background: rgba(16,26,51,.72); box-shadow: var(--shadow);
-      position:sticky; top:12px; backdrop-filter: blur(10px); z-index:10;
-    }
-    .brand{ display:flex; align-items:center; gap:10px; }
-    .logo{
-      width:36px; height:36px; border-radius:12px;
-      background: linear-gradient(135deg, #7aa2ff 0%, #43d19e 100%);
-      box-shadow: 0 10px 20px rgba(0,0,0,.25);
-    }
-    .brand h1{ font-size:16px; margin:0; letter-spacing:.2px; }
-    .brand small{ color:var(--muted); display:block; margin-top:2px; }
-
-    .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .chip{
-      display:inline-flex; gap:8px; align-items:center;
-      padding:7px 10px; border-radius:999px;
-      background: rgba(26,42,84,.75);
-      border:1px solid var(--line); color:var(--text);
-      font-size:12px;
-    }
-    .badge{
-      font-weight:700; letter-spacing:.3px;
-      padding:3px 8px; border-radius:999px;
-      background: rgba(122,162,255,.15);
-      border:1px solid rgba(122,162,255,.35);
-      color:var(--text);
-      font-size:12px;
-      text-transform:uppercase;
-    }
-    .badge.fin{
-      background: rgba(67,209,158,.15);
-      border:1px solid rgba(67,209,158,.35);
-    }
-    .badge.ops{
-      background: rgba(255,204,102,.12);
-      border:1px solid rgba(255,204,102,.35);
-    }
-
-    .btn{
-      border:1px solid var(--line);
-      background: rgba(255,255,255,.06);
-      color:var(--text);
-      padding:10px 12px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:600;
-      transition: transform .05s ease, background .15s ease, border-color .15s ease;
-      user-select:none;
-    }
-    .btn:hover{ background: rgba(255,255,255,.09); }
-    .btn:active{ transform: translateY(1px); }
-    .btn.primary{
-      background: rgba(122,162,255,.18);
-      border-color: rgba(122,162,255,.40);
-    }
-    .btn.good{
-      background: rgba(67,209,158,.16);
-      border-color: rgba(67,209,158,.40);
-    }
-    .btn.warn{
-      background: rgba(255,204,102,.12);
-      border-color: rgba(255,204,102,.38);
-    }
-    .btn.bad{
-      background: rgba(255,107,107,.12);
-      border-color: rgba(255,107,107,.40);
-    }
-    .btn[disabled]{
-      opacity:.55; cursor:not-allowed;
-    }
-
-    .grid2{
+    .wrap{
+      width:min(1040px, 100%);
       display:grid;
-      grid-template-columns: 1.05fr .95fr;
-      gap:14px;
-      margin-top:14px;
-    }
-    @media (max-width: 980px){
-      .grid2{ grid-template-columns: 1fr; }
-      .topbar{ position:relative; top:auto; }
+      grid-template-columns: 1fr;
+      gap:18px;
+      justify-items:center;
     }
     .card{
-      border:1px solid var(--line);
-      background: rgba(16,26,51,.72);
-      border-radius:18px;
-      box-shadow: var(--shadow);
+      width:min(760px, 100%);
+      background:var(--card);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
       overflow:hidden;
+      backdrop-filter: blur(10px);
     }
-    .card .hd{
-      padding:14px 16px;
-      display:flex; align-items:center; justify-content:space-between;
-      gap:10px;
-      border-bottom:1px solid var(--line);
-      background: rgba(10,18,36,.35);
+    .cardHeader{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:18px 18px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(180deg, rgba(255,255,255,.03), transparent);
     }
-    .card .hd h2{
-      margin:0;
-      font-size:14px;
-      letter-spacing:.2px;
+    .logo{
+      width:28px;height:28px;border-radius:10px;
+      background:linear-gradient(135deg, rgba(63,187,255,1), rgba(0,255,196,1));
+      box-shadow:0 10px 20px rgba(0,255,196,.12);
+      flex:0 0 auto;
     }
-    .card .bd{ padding:14px 16px; }
-
-    .form-grid{
-      display:grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap:10px;
-    }
-    .field{ grid-column: span 6; }
-    .field.sm{ grid-column: span 3; }
-    .field.lg{ grid-column: span 12; }
-    label{
-      display:block;
-      font-size:12px;
-      color:var(--muted);
-      margin:0 0 6px;
-    }
-    input, select, textarea{
+    .titleBox{line-height:1.1}
+    .title{font-weight:700;font-size:14px}
+    .sub{color:var(--muted);font-size:12px;margin-top:3px}
+    .cardBody{padding:18px}
+    h2{margin:0 0 14px;font-size:14px;letter-spacing:.2px}
+    label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
+    input, select{
       width:100%;
-      padding:10px 10px;
-      border-radius:12px;
-      border:1px solid var(--line);
-      background: rgba(255,255,255,.06);
+      height:38px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.07);
       color:var(--text);
+      padding:0 12px;
       outline:none;
     }
-    textarea{ min-height: 72px; resize: vertical; }
-    input::placeholder, textarea::placeholder{ color: rgba(231,236,255,.45); }
-
-    .hint{ font-size:12px; color:var(--muted); margin-top:8px; }
-    .split{
-      display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
-    }
-
-    .table-wrap{
-      border:1px solid var(--line);
-      border-radius:14px;
-      overflow:auto;
-      background: rgba(15,25,48,.55);
-    }
-    table{ width:100%; border-collapse:collapse; font-size:12px; }
-    th, td{
-      padding:10px 10px;
-      border-bottom:1px solid rgba(255,255,255,.07);
-      text-align:left;
-      white-space:nowrap;
-    }
-    th{ color:var(--muted); font-weight:700; font-size:11px; letter-spacing:.3px; }
-    tr:hover td{ background: rgba(255,255,255,.04); }
-    .muted{ color:var(--muted); }
-
-    .two-col{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:14px;
-    }
-    @media (max-width: 980px){
-      .two-col{ grid-template-columns:1fr; }
-    }
-
-    .kpi{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap:10px;
-    }
-    @media (max-width: 700px){ .kpi{ grid-template-columns:1fr; } }
-
-    .kpi .box{
-      border:1px solid var(--line);
-      border-radius:14px;
-      padding:12px;
-      background: rgba(255,255,255,.05);
-    }
-    .kpi .box .t{ color:var(--muted); font-size:11px; margin-bottom:6px; }
-    .kpi .box .v{ font-weight:800; font-size:16px; letter-spacing:.2px; }
-    .kpi .box.good .v{ color: var(--good); }
-    .kpi .box.bad .v{ color: var(--bad); }
-
-    .sep{ height:1px; background: var(--line); margin:14px 0; }
-
-    /* Auth view */
-    .auth-wrap{
-      max-width:520px;
-      margin: 54px auto 0;
-    }
-    .auth-title{ margin:0 0 10px; font-size:18px; }
-    .toast{
-      margin-top:10px;
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px solid var(--line);
-      background: rgba(255,255,255,.06);
+    input::placeholder{color:rgba(233,241,255,.45)}
+    .row{display:grid; gap:10px}
+    .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+    .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap}
+    button{
+      cursor:pointer;
+      height:36px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
       color:var(--text);
-      display:none;
+      background:rgba(255,255,255,.08);
+      padding:0 14px;
+      font-weight:600;
     }
-    .toast.show{ display:block; }
-    .toast.good{ border-color: rgba(67,209,158,.35); background: rgba(67,209,158,.10); }
-    .toast.bad{ border-color: rgba(255,107,107,.35); background: rgba(255,107,107,.10); }
+    .btn.primary{background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));}
+    .btn.good{background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));}
+    .btn.warn{background:linear-gradient(180deg, rgba(255,183,0,1), rgba(193,123,0,1));color:#081018;}
+    .muted{color:var(--muted); font-size:12px}
+    .status{margin-top:10px;font-size:12px;word-break:break-word}
+    .badge{margin-top:8px;font-size:12px;word-break:break-word;opacity:.95}
+    .section{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+    .chip{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(15,36,70,.8);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+    th, td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;vertical-align:top}
+    th{color:var(--muted); font-weight:700}
+    tr:hover{background:rgba(255,255,255,.03)}
+    .small{font-size:11px}
+    .mono{font-family:var(--mono)}
+    .hidden{display:none}
   </style>
 </head>
 
 <body>
-  <!-- AUTH VIEW -->
-  <div id="authView" class="container">
-    <div class="auth-wrap card">
-      <div class="hd">
-        <div class="brand">
-          <div class="logo"></div>
-          <div>
-            <h1>CargoWise-ish MVP</h1>
-            <small class="muted">Login to manage jobs, charges & invoices</small>
-          </div>
-        </div>
-      </div>
+  <div class="wrap">
 
-      <div class="bd">
-        <h2 class="auth-title">Sign in</h2>
-        <div class="form-grid">
-          <div class="field lg">
-            <label>Email</label>
-            <input id="loginEmail" type="email" placeholder="you@company.com" autocomplete="username" />
-          </div>
-          <div class="field lg">
-            <label>Password</label>
-            <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
-          </div>
-          <div class="field lg split">
-            <button id="btnLogin" class="btn primary">Login</button>
-            <button id="btnLogout" class="btn" style="display:none;">Logout</button>
-          </div>
-        </div>
-        <div id="authToast" class="toast"></div>
-        <div class="hint">
-          Tip: if login fails after role/branch changes, refresh once to reload session state.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- APP VIEW -->
-  <div id="appView" class="container" style="display:none;">
-    <div class="topbar">
-      <div class="brand">
+    <!-- LOGIN CARD -->
+    <div class="card" id="loginCard">
+      <div class="cardHeader">
         <div class="logo"></div>
-        <div>
-          <h1>CargoWise-ish MVP</h1>
-          <small id="envHint" class="muted">Supabase connected • Jobs • Charges • Invoice draft</small>
+        <div class="titleBox">
+          <div class="title">CargoWise-ish MVP</div>
+          <div class="sub">Login to manage jobs, charges & invoices</div>
         </div>
       </div>
 
-      <div class="row">
-        <span class="chip">
-          <span class="muted">User:</span>
-          <strong id="whoamiEmail">-</strong>
-        </span>
-        <span class="chip">
-          <span class="muted">Role:</span>
-          <span id="whoamiRole" class="badge">-</span>
-        </span>
+      <div class="cardBody">
+        <h2>Sign in</h2>
 
-        <span class="chip">
-          <span class="muted">Branch:</span>
-          <select id="branchSelect" style="min-width:160px; padding:8px 10px;">
-            <option value="">Loading...</option>
-          </select>
-        </span>
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="name@company.com" autocomplete="username" />
 
-        <button id="btnSignOut" class="btn">Sign out</button>
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+        <div class="btnBar">
+          <button id="btnLogin" class="btn primary">Login</button>
+          <button id="btnLogout" class="btn hidden">Logout</button>
+          <button id="btnSignOut" class="btn hidden">Sign out</button>
+        </div>
+
+        <div id="status" class="status muted">Ready.</div>
+        <div id="loggedInBadge" class="badge"></div>
+
+        <div class="muted small" style="margin-top:10px;">
+          Tip: If login fails after role/branch changes, refresh once to reload session state.
+        </div>
       </div>
     </div>
 
-    <div class="grid2">
-      <!-- LEFT: CREATE JOB -->
-      <div class="card">
-        <div class="hd">
-          <h2>Create Job</h2>
-          <div class="row">
-            <span class="chip"><span class="muted">Selected:</span> <strong id="selectedJobNo">None</strong></span>
+    <!-- APP CARD -->
+    <div class="card hidden" id="appCard">
+      <div class="cardHeader">
+        <div class="logo"></div>
+        <div class="titleBox">
+          <div class="title">Operations</div>
+          <div class="sub">Jobs • Charges • Draft Invoice</div>
+        </div>
+      </div>
+
+      <div class="cardBody">
+
+        <div class="row2">
+          <div>
+            <label>Branch</label>
+            <select id="branch"></select>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:10px;">
+            <span class="chip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
           </div>
         </div>
-        <div class="bd">
-          <!-- Keep your existing fields (app.js will wire to these IDs if used) -->
-          <div class="form-grid">
-            <div class="field sm">
-              <label>Transport Mode</label>
-              <select id="jobTransportMode">
-                <option value="S">Sea (S)</option>
-                <option value="A">Air (A)</option>
-                <option value="L">Land (L)</option>
-                <option value="I">Integrated (I)</option>
-              </select>
-            </div>
-            <div class="field sm">
-              <label>Job Type</label>
-              <select id="jobType">
-                <option value="O">Export (O)</option>
-                <option value="I">Import (I)</option>
-                <option value="D">Domestic (D)</option>
-              </select>
-            </div>
-            <div class="field sm">
-              <label>Customer</label>
-              <input id="jobCustomer" placeholder="Customer name/code" />
-            </div>
-            <div class="field sm">
-              <label>Incoterm</label>
-              <input id="jobIncoterm" placeholder="FOB/CIF/DDP..." />
-            </div>
 
-            <div class="field lg">
-              <label>Commodity / Description</label>
-              <textarea id="jobCommodity" placeholder="What are we shipping?"></textarea>
-            </div>
+        <!-- JOBS -->
+        <div class="section">
+          <h2>Jobs</h2>
 
-            <div class="field lg split">
-              <button id="btnCreateJob" class="btn good">Create Job</button>
-              <span class="muted" id="createJobStatus">Ready.</span>
-            </div>
-          </div>
-
-          <div class="sep"></div>
-
-          <div class="split" style="margin-bottom:10px;">
+          <div class="row3">
             <div>
-              <strong>Jobs</strong>
-              <div class="muted" style="font-size:12px;">Click a row to select a job (then add charges / draft invoice)</div>
+              <label>Country Code</label>
+              <input id="country" placeholder="SG" />
             </div>
-            <div class="row">
-              <button id="btnRefreshJobs" class="btn">Refresh</button>
+            <div>
+              <label>Transport Mode</label>
+              <select id="transport_mode">
+                <option value="S">S (Sea)</option>
+                <option value="A">A (Air)</option>
+                <option value="L">L (Land)</option>
+                <option value="I">I (Integrated)</option>
+              </select>
+            </div>
+            <div>
+              <label>Job Type</label>
+              <select id="job_type">
+                <option value="O">O (Export)</option>
+                <option value="I">I (Import)</option>
+              </select>
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Job No</th>
-                  <th>Branch</th>
-                  <th>Mode</th>
-                  <th>Type</th>
-                  <th>Customer</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody id="jobsTbody">
-                <tr><td colspan="6" class="muted">Loading...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- hidden selected job id (app.js uses this) -->
-          <input type="hidden" id="selectedJobId" value="" />
-        </div>
-      </div>
-
-      <!-- RIGHT: SHIPMENT + MILESTONES -->
-      <div class="card">
-        <div class="hd">
-          <h2>Shipment + Milestones</h2>
           <div class="row">
-            <button id="btnRefreshJobDetails" class="btn">Refresh</button>
-          </div>
-        </div>
-        <div class="bd">
-          <div class="muted" style="font-size:12px; margin-bottom:10px;">
-            This card stays as-is. Charges & Invoice UI is placed in a new third card below (Option C).
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Field</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody id="jobDetailsTbody">
-                <tr><td colspan="2" class="muted">Select a job to view details...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="sep"></div>
-
-          <div class="split" style="margin-bottom:10px;">
-            <strong>Milestones</strong>
-            <div class="row">
-              <button id="btnAddMilestone" class="btn">Add</button>
+            <div>
+              <label>Customer Name</label>
+              <input id="customer" placeholder="Customer / Shipper" />
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Milestone</th>
-                  <th>Date/Time</th>
-                  <th>Timezone</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody id="milestonesTbody">
-                <tr><td colspan="4" class="muted">Select a job to view milestones...</td></tr>
-              </tbody>
-            </table>
+          <div class="btnBar">
+            <button id="btnCreateJob" class="btn good">Create Job</button>
+            <button id="btnRefreshJobs" class="btn">Refresh</button>
+            <button id="btnRefreshJobDetails" class="btn">Refresh Details</button>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Job No</th>
+                <th>Country</th>
+                <th>Branch</th>
+                <th>Mode</th>
+                <th>Type</th>
+                <th>Customer</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTableBody"></tbody>
+          </table>
+
+          <div class="muted small" style="margin-top:8px;">
+            Tip: Click a job row to select it (loads charges).
           </div>
         </div>
+
+        <!-- CHARGES -->
+        <div class="section">
+          <h2>Charges</h2>
+
+          <div class="row3">
+            <div>
+              <label>Charge Code</label>
+              <input id="charge_code" placeholder="FRT / DOC / THC" />
+            </div>
+            <div>
+              <label>Amount</label>
+              <input id="amount" placeholder="100.00" />
+            </div>
+            <div>
+              <label>Currency</label>
+              <input id="currency" placeholder="USD" />
+            </div>
+          </div>
+
+          <div class="row2">
+            <div>
+              <label>Type</label>
+              <select id="charge_type">
+                <option value="SELL">SELL</option>
+                <option value="BUY">BUY</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:10px;">
+              <button id="btnAddCharge" class="btn good" style="width:100%;">Add Charge</button>
+            </div>
+          </div>
+
+          <div class="btnBar">
+            <button id="btnRefreshCharges" class="btn">Refresh Charges</button>
+            <button id="btnRefreshProfit" class="btn">Refresh Profit</button>
+            <button id="btnDraftInvoice" class="btn warn">Generate Invoice Draft</button>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Amount</th>
+                <th>Currency</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody id="chargesTableBody"></tbody>
+          </table>
+
+          <div class="muted small" style="margin-top:8px;">
+            Tip: Select a job first. Charges are tied to the selected job.
+          </div>
+        </div>
+
+        <!-- MILESTONES placeholder -->
+        <div class="section">
+          <h2>Milestones</h2>
+          <div class="btnBar">
+            <button id="btnAddMilestone" class="btn">Add</button>
+          </div>
+          <div class="muted small">Placeholder (we wire this next).</div>
+        </div>
+
       </div>
     </div>
 
-    <!-- NEW THIRD CARD (Option C): Charges + Invoice -->
-    <div class="card" style="margin-top:14px;">
-      <div class="hd">
-        <h2>Charges + Profit + Invoice Draft</h2>
-        <div class="row">
-          <span class="chip"><span class="muted">Selected Job:</span> <strong id="selectedJobNo2">None</strong></span>
-          <button id="btnRefreshCharges" class="btn">Refresh Charges</button>
-          <button id="btnRefreshProfit" class="btn">Refresh Profit</button>
-        </div>
-      </div>
-
-      <div class="bd">
-        <div class="two-col">
-
-          <!-- LEFT: Add Charge + Charges list -->
-          <div>
-            <div class="split" style="margin-bottom:10px;">
-              <div>
-                <strong>Add Charge</strong>
-                <div class="muted" style="font-size:12px;">
-                  BUY & SELL supported • Currency will load from DB (Option 2)
-                </div>
-              </div>
-            </div>
-
-            <div class="form-grid">
-              <div class="field sm">
-                <label>Type</label>
-                <select id="chargeType">
-                  <option value="SELL">SELL</option>
-                  <option value="BUY">BUY</option>
-                </select>
-              </div>
-
-              <div class="field sm">
-                <label>Charge Code</label>
-                <input id="chargeCode" placeholder="e.g. FRT / THC / DOC" />
-              </div>
-
-              <div class="field sm">
-                <label>Qty</label>
-                <input id="chargeQty" type="number" step="0.0001" placeholder="1" />
-              </div>
-
-              <div class="field sm">
-                <label>Unit Price</label>
-                <input id="chargeUnitPrice" type="number" step="0.0001" placeholder="100" />
-              </div>
-
-              <div class="field sm">
-                <label>Currency</label>
-                <select id="chargeCurrency">
-                  <option value="">Loading...</option>
-                </select>
-              </div>
-
-              <div class="field lg">
-                <label>Description</label>
-                <input id="chargeDesc" placeholder="Free text (optional)" />
-              </div>
-
-              <div class="field lg split">
-                <button id="btnAddCharge" class="btn good">Add Charge</button>
-                <span id="addChargeStatus" class="muted">—</span>
-              </div>
-            </div>
-
-            <div class="sep"></div>
-
-            <div class="split" style="margin-bottom:10px;">
-              <div>
-                <strong>Charges (Latest)</strong>
-                <div class="muted" style="font-size:12px;">SELL/BUY lines with source currency & audit fields</div>
-              </div>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Code</th>
-                    <th>Description</th>
-                    <th>Qty</th>
-                    <th>Unit</th>
-                    <th>Cur</th>
-                    <th>Line Amt</th>
-                    <th>USD Amt</th>
-                    <th>FX</th>
-                    <th>Created At</th>
-                    <th>Created By</th>
-                  </tr>
-                </thead>
-                <tbody id="chargesTbody">
-                  <tr><td colspan="11" class="muted">Select a job to view charges...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- RIGHT: Profit summary + Invoice draft preview -->
-          <div>
-            <div class="split" style="margin-bottom:10px;">
-              <div>
-                <strong>Profit Summary (USD)</strong>
-                <div class="muted" style="font-size:12px;">
-                  Computed from charges using FX to USD
-                </div>
-              </div>
-            </div>
-
-            <div class="kpi">
-              <div class="box">
-                <div class="t">SELL (USD)</div>
-                <div id="kpiSellUsd" class="v">0.00</div>
-              </div>
-              <div class="box">
-                <div class="t">BUY (USD)</div>
-                <div id="kpiBuyUsd" class="v">0.00</div>
-              </div>
-              <div class="box good">
-                <div class="t">PROFIT (USD)</div>
-                <div id="kpiProfitUsd" class="v">0.00</div>
-              </div>
-            </div>
-
-            <div class="sep"></div>
-
-            <div class="split" style="margin-bottom:10px;">
-              <div>
-                <strong>Invoice Draft</strong>
-                <div class="muted" style="font-size:12px;">
-                  Button enabled only for <b>FIN</b> (Option Y) — app.js will enforce.
-                </div>
-              </div>
-              <div class="row">
-                <button id="btnDraftInvoice" class="btn primary">Generate Invoice Draft</button>
-              </div>
-            </div>
-
-            <div class="muted" style="font-size:12px; margin-bottom:8px;">
-              Latest invoice lines (USD) + audit fields
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Invoice No</th>
-                    <th>Line</th>
-                    <th>Charge Code</th>
-                    <th>Description</th>
-                    <th>Qty</th>
-                    <th>Unit USD</th>
-                    <th>Line USD</th>
-                    <th>Created At</th>
-                    <th>Created By</th>
-                  </tr>
-                </thead>
-                <tbody id="invoiceLinesTbody">
-                  <tr><td colspan="9" class="muted">No invoice draft yet...</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div id="invoiceStatus" class="hint">—</div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <div style="height:20px;"></div>
   </div>
 
-  <!-- Your app logic -->
-  <script src="./app.js"></script>
+  <!-- IMPORTANT: Correct script tag -->
+  <script src="./app.js?v=20260513e"></script>
 </body>
 </html>
