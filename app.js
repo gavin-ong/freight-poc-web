@@ -1,9 +1,9 @@
 /* =========================================================
-   CargoWise-ish MVP - app.js (LOGIN WORKING + UI TOGGLE + RLS DIAG)
-   - Works without ES module import
-   - Handles Menlo/SafeView weird clicks (pointerdown + capture + Enter)
-   - Forces UI flip after login (so you can SEE you are logged in)
-   - Keeps errors visible (no instant overwrite to "Ready")
+   CargoWise-ish MVP - app.js (GLOBAL DEBUG + REAL LOGIN STATE)
+   Fixes:
+   - Console can’t see supabase -> expose window.supabaseClient
+   - “Feels like not logged in” -> show badge + sticky status
+   - Menlo/SafeView click weirdness -> pointerdown capture
    ========================================================= */
 
 (function () {
@@ -13,9 +13,9 @@
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const APP_VERSION = "app.js v2026-05-13c (ui-toggle + pointerdown + rls-diag)";
+  const APP_VERSION = "app.js v2026-05-13d (expose client + badge + sticky errors)";
 
-  let supabase = null;
+  let supabaseClient = null;
   let currentUser = null;
 
   // -------------------------------
@@ -23,12 +23,7 @@
   // -------------------------------
   const byId = (id) => document.getElementById(id);
 
-  function safeText(el) {
-    return (el && el.textContent ? el.textContent : "").trim();
-  }
-
   function setStatus(msg, isError = false, sticky = false) {
-    // sticky=true means don't overwrite later unless explicitly set again
     const el =
       byId("status") ||
       byId("statusText") ||
@@ -38,20 +33,19 @@
     if (el) {
       el.textContent = msg;
       el.style.color = isError ? "#ff7b7b" : "#9fffb0";
-      if (sticky) el.dataset.sticky = "1";
-      if (!sticky) el.dataset.sticky = "0";
+      el.dataset.sticky = sticky ? "1" : "0";
     } else {
       (isError ? console.error : console.log)(msg);
     }
   }
 
-  function getStatusSticky() {
+  function isStickyStatus() {
     const el =
       byId("status") ||
       byId("statusText") ||
       byId("lblStatus") ||
       byId("txtStatus");
-    return el && el.dataset.sticky === "1";
+    return !!(el && el.dataset.sticky === "1");
   }
 
   function ensureStatusElementExists() {
@@ -69,21 +63,22 @@
     anchor.parentElement.appendChild(status);
   }
 
-  function injectLoggedInBadge(email) {
+  function upsertBadge(text, ok = true) {
     let badge = byId("loggedInBadge");
     if (!badge) {
       badge = document.createElement("div");
       badge.id = "loggedInBadge";
       badge.style.marginTop = "10px";
       badge.style.fontSize = "12px";
-      badge.style.color = "#9fffb0";
       badge.style.opacity = "0.95";
-      // insert near status if possible
+      badge.style.wordBreak = "break-word";
+
       const statusEl = byId("status") || byId("statusText");
       if (statusEl && statusEl.parentElement) statusEl.parentElement.appendChild(badge);
       else document.body.appendChild(badge);
     }
-    badge.textContent = `✅ Logged in as: ${email || "(unknown)"}`;
+    badge.style.color = ok ? "#9fffb0" : "#ff7b7b";
+    badge.textContent = text;
   }
 
   function loadScript(src) {
@@ -119,37 +114,25 @@
   }
 
   // -------------------------------
-  // UI TOGGLE (SO YOU CAN SEE LOGIN WORKED)
+  // OPTIONAL UI TOGGLE (best effort)
   // -------------------------------
   function toggleUI(isLoggedIn) {
-    // 1) Common containers if you have them
-    const loginCard = byId("loginCard") || byId("loginContainer") || byId("authCard") || byId("authContainer");
-    const appCard = byId("appCard") || byId("appContainer") || byId("mainApp") || byId("appMain");
+    // If you have containers, great. If not, we still show badge + status.
+    const loginCard =
+      byId("loginCard") || byId("loginContainer") || byId("authCard") || byId("authContainer");
+    const appCard =
+      byId("appCard") || byId("appContainer") || byId("mainApp") || byId("appMain");
 
     if (loginCard) loginCard.style.display = isLoggedIn ? "none" : "";
     if (appCard) appCard.style.display = isLoggedIn ? "" : "none";
 
-    // 2) Your known buttons from console:
+    const btnLogin = byId("btnLogin");
     const btnLogout = byId("btnLogout");
     const btnSignOut = byId("btnSignOut");
-    const btnLogin = byId("btnLogin");
 
+    if (btnLogin) btnLogin.style.display = isLoggedIn ? "none" : "";
     if (btnLogout) btnLogout.style.display = isLoggedIn ? "" : "none";
     if (btnSignOut) btnSignOut.style.display = isLoggedIn ? "" : "none";
-    if (btnLogin) btnLogin.style.display = isLoggedIn ? "none" : "";
-
-    // 3) If you don’t have containers, hide the card that contains "Sign in"
-    //    (safe fallback: only hides if we can find a clear header)
-    const headings = Array.from(document.querySelectorAll("h1,h2,h3,div,label"));
-    const signInEl = headings.find((el) => safeText(el).toLowerCase() === "sign in");
-    if (signInEl) {
-      const card =
-        signInEl.closest(".card") ||
-        signInEl.closest(".panel") ||
-        signInEl.closest("section") ||
-        signInEl.closest("div");
-      if (card && !loginCard) card.style.display = isLoggedIn ? "none" : "";
-    }
   }
 
   // -------------------------------
@@ -168,9 +151,13 @@
       throw new Error("Supabase createClient missing");
     }
 
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // EXPOSE FOR DEBUGGING IN DEVTOOLS
+    window.supabaseClient = supabaseClient;
+
     console.log(APP_VERSION);
-    setStatus("Ready.");
+    if (!isStickyStatus()) setStatus("Ready.");
   }
 
   // -------------------------------
@@ -182,116 +169,96 @@
 
       if (!email || !password) {
         setStatus("Email and password required.", true, true);
+        upsertBadge("❌ Missing email/password", false);
         return;
       }
 
       setStatus("Signing in...");
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
       if (error) {
         setStatus("Login failed: " + error.message, true, true);
+        upsertBadge("❌ Login failed: " + error.message, false);
         console.error("Auth error:", error);
         return;
       }
 
-      // Some setups return user but session may be null; verify session
-      const sessionCheck = await supabase.auth.getSession();
-      const sessionUser = sessionCheck?.data?.session?.user || data?.user || null;
+      // Confirm session exists (this is the REAL truth)
+      const s = await supabaseClient.auth.getSession();
+      const sessionUser = s?.data?.session?.user || data?.user || null;
 
       if (!sessionUser) {
-        setStatus("Login did not create a session (check auth settings / API key).", true, true);
-        console.error("No session user after signIn", { data, sessionCheck });
+        setStatus("Login did not create a session (key/auth settings issue).", true, true);
+        upsertBadge("❌ No session created after login", false);
+        console.error("No session after signIn", { data, session: s });
         return;
       }
 
       currentUser = sessionUser;
-
-      injectLoggedInBadge(currentUser.email);
+      upsertBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
       toggleUI(true);
 
       await afterLogin();
 
     } catch (e) {
       setStatus("Login crashed: " + (e.message || e), true, true);
+      upsertBadge("❌ Login crashed: " + (e.message || e), false);
       console.error(e);
     }
   }
 
   async function signOut() {
     setStatus("Signing out...");
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabaseClient.auth.signOut();
     if (error) {
       setStatus("Logout failed: " + error.message, true, true);
-      console.error(error);
+      upsertBadge("❌ Logout failed: " + error.message, false);
       return;
     }
     currentUser = null;
     toggleUI(false);
     setStatus("Signed out.", false, true);
+    upsertBadge("Signed out.", true);
   }
 
   async function restoreSession() {
     setStatus("Checking session...");
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabaseClient.auth.getSession();
+
     if (error) {
       setStatus("Session error: " + error.message, true, true);
-      console.error(error);
+      upsertBadge("❌ Session error: " + error.message, false);
       return;
     }
 
     if (data?.session?.user) {
       currentUser = data.session.user;
-      injectLoggedInBadge(currentUser.email);
+      upsertBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
       toggleUI(true);
       await afterLogin();
       return;
     }
 
+    currentUser = null;
     toggleUI(false);
-    setStatus("Ready.");
+    if (!isStickyStatus()) setStatus("Ready.");
   }
 
   // -------------------------------
-  // DATA LOADERS (WITH RLS DIAG)
+  // DATA LOADERS (RLS DIAG)
   // -------------------------------
-  async function loadUserProfile() {
-    if (!currentUser) return { ok: false, msg: "No user" };
-
-    const { data, error } = await supabase
-      .from("users")
-      .select("branch_code, role")
-      .eq("id", currentUser.id)
-      .single();
-
-    if (error) {
-      console.error("users table error:", error);
-      return { ok: false, msg: "users: " + error.message };
-    }
-
-    // default branch dropdown if exists
-    const branchDropdown = byId("branch") || byId("ddlBranch");
-    if (branchDropdown && data?.branch_code) {
-      branchDropdown.value = data.branch_code;
-    }
-
-    return { ok: true };
-  }
-
   async function loadBranches() {
     const dropdown = byId("branch") || byId("ddlBranch");
-    if (!dropdown) return { ok: true }; // no dropdown = no problem
+    if (!dropdown) return { ok: true };
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("branches")
       .select("country_code, branch_code")
       .order("country_code", { ascending: true })
       .order("branch_code", { ascending: true });
 
-    if (error) {
-      console.error("branches table error:", error);
-      return { ok: false, msg: "branches: " + error.message };
-    }
+    if (error) return { ok: false, msg: "branches: " + error.message };
 
     dropdown.innerHTML = "";
     (data || []).forEach((b) => {
@@ -304,19 +271,33 @@
     return { ok: true };
   }
 
+  async function loadUserProfile() {
+    if (!currentUser) return { ok: false, msg: "No user" };
+
+    const { data, error } = await supabaseClient
+      .from("users")
+      .select("branch_code, role")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (error) return { ok: false, msg: "users: " + error.message };
+
+    const dropdown = byId("branch") || byId("ddlBranch");
+    if (dropdown && data?.branch_code) dropdown.value = data.branch_code;
+
+    return { ok: true };
+  }
+
   async function loadJobs() {
     const tbody = byId("jobsTableBody");
-    if (!tbody) return { ok: true }; // no table = no problem
+    if (!tbody) return { ok: true };
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("jobs")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("jobs table error:", error);
-      return { ok: false, msg: "jobs: " + error.message };
-    }
+    if (error) return { ok: false, msg: "jobs: " + error.message };
 
     tbody.innerHTML = "";
     (data || []).forEach((job) => {
@@ -342,12 +323,9 @@
     const bad = results.find((r) => r && r.ok === false);
 
     if (bad) {
-      // Important: keep the error visible (sticky) so you know it's RLS or table issue
-      setStatus(
-        "✅ Logged in, but data blocked: " + bad.msg + " (RLS/policy/table).",
-        true,
-        true
-      );
+      setStatus("✅ Logged in, but data blocked: " + bad.msg, true, true);
+      upsertBadge("✅ Logged in as: " + (currentUser?.email || "(unknown)") + " | ⚠ Data blocked: " + bad.msg, false);
+      console.warn("Data blocked (RLS/policies):", bad.msg);
       return;
     }
 
@@ -355,33 +333,14 @@
   }
 
   // -------------------------------
-  // EVENT CAPTURE (MENLO/SafeView CLICK WEIRDNESS)
+  // EVENT BINDING (Menlo/SafeView proof)
   // -------------------------------
-  function installLoginTriggers() {
-    // 1) Capture phase click
-    document.addEventListener(
-      "click",
-      (e) => {
-        const btn = e.target && e.target.closest ? e.target.closest("button") : null;
-        if (!btn) return;
-
-        const id = (btn.id || "").trim();
-        const text = (btn.textContent || "").trim().toLowerCase();
-
-        if (id === "btnLogin" || text === "login") {
-          e.preventDefault();
-          setStatus("Signing in...");
-          signIn();
-        }
-      },
-      true
-    );
-
-    // 2) pointerdown (often works when click is swallowed)
+  function installTriggers() {
+    // pointerdown capture catches most “click swallowed” cases
     document.addEventListener(
       "pointerdown",
       (e) => {
-        const btn = e.target && e.target.closest ? e.target.closest("button") : null;
+        const btn = e.target?.closest ? e.target.closest("button") : null;
         if (!btn) return;
 
         const id = (btn.id || "").trim();
@@ -389,36 +348,37 @@
 
         if (id === "btnLogin" || text === "login") {
           e.preventDefault();
-          setStatus("Signing in...");
           signIn();
+        }
+        if (id === "btnLogout" || id === "btnSignOut" || text === "logout" || text === "sign out") {
+          e.preventDefault();
+          signOut();
         }
       },
       true
     );
 
-    // 3) Enter key triggers login
+    // Enter key triggers login
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        // If user is on login screen, use Enter to login
+      if (e.key === "Enter" && !currentUser) {
         const hasEmail = !!(byId("email") || document.querySelector('input[type="email"]'));
         const hasPass = !!(byId("password") || document.querySelector('input[type="password"]'));
-        if (hasEmail && hasPass && !currentUser) {
+        if (hasEmail && hasPass) {
           e.preventDefault();
-          setStatus("Signing in...");
           signIn();
         }
       }
     });
 
-    // 4) Bind logout buttons if present
-    const btnLogout = byId("btnLogout");
-    if (btnLogout) btnLogout.addEventListener("pointerdown", (e) => { e.preventDefault(); signOut(); }, true);
-
-    const btnSignOut = byId("btnSignOut");
-    if (btnSignOut) btnSignOut.addEventListener("pointerdown", (e) => { e.preventDefault(); signOut(); }, true);
-
-    // Manual trigger (kept)
+    // Expose debug helpers (so you can test without clicking)
     window.__cw_login = signIn;
+    window.__cw_logout = signOut;
+    window.__cw_session = async () => {
+      const r = await supabaseClient.auth.getSession();
+      console.log("SESSION:", r.data.session);
+      console.log("EMAIL:", r.data.session?.user?.email);
+      return r;
+    };
   }
 
   // -------------------------------
@@ -426,7 +386,7 @@
   // -------------------------------
   async function init() {
     await initSupabase();
-    installLoginTriggers();
+    installTriggers();
     await restoreSession();
   }
 
@@ -434,6 +394,8 @@
     init().catch((e) => {
       console.error(e);
       setStatus("Init failed: " + (e.message || e), true, true);
+      upsertBadge("❌ Init failed: " + (e.message || e), false);
     });
   });
 })();
+``
