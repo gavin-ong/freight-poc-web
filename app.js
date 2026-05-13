@@ -2,7 +2,7 @@
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const APP_VERSION = "BUILD: 2026-05-13e (JS)";
+  const BUILD = "BUILD JS: 2026-05-13-RECOVERY";
 
   let supabaseClient = null;
   let currentUser = null;
@@ -12,13 +12,10 @@
 
   function setStatus(msg, isError = false, sticky = false) {
     const el = byId("status");
-    if (el) {
-      el.textContent = msg;
-      el.style.color = isError ? "#ff7b7b" : "#9fffb0";
-      el.dataset.sticky = sticky ? "1" : "0";
-    } else {
-      (isError ? console.error : console.log)(msg);
-    }
+    if (!el) return (isError ? console.error : console.log)(msg);
+    el.textContent = msg;
+    el.style.color = isError ? "#ff7b7b" : "#9fffb0";
+    el.dataset.sticky = sticky ? "1" : "0";
   }
 
   function setBadge(msg, ok = true) {
@@ -59,18 +56,23 @@
   }
 
   async function initSupabase() {
-    if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Loading Supabase library...");
-      await loadScript(SUPABASE_CDN);
+    try {
+      if (!window.supabase || !window.supabase.createClient) {
+        setStatus("Loading Supabase library...");
+        await loadScript(SUPABASE_CDN);
+      }
+      if (!window.supabase || !window.supabase.createClient) {
+        setStatus("Supabase failed to load (CDN blocked).", true, true);
+        return;
+      }
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      window.supabaseClient = supabaseClient;
+      console.log(BUILD);
+      setStatus("Ready.");
+    } catch (e) {
+      setStatus("Init crash: " + (e.message || e), true, true);
+      console.error(e);
     }
-    if (!window.supabase || !window.supabase.createClient) {
-      setStatus("Supabase library failed to load.", true, true);
-      throw new Error("Supabase createClient missing");
-    }
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    window.supabaseClient = supabaseClient; // debug
-    console.log(APP_VERSION);
-    setStatus("Ready.");
   }
 
   function getEmailPassword() {
@@ -98,15 +100,15 @@
     }
 
     const s = await supabaseClient.auth.getSession();
-    const sessionUser = s?.data?.session?.user || data?.user || null;
-    if (!sessionUser) {
-      setStatus("Login did not create a session (auth key/settings).", true, true);
-      setBadge("❌ No session created after login", false);
+    const user = s?.data?.session?.user || data?.user || null;
+    if (!user) {
+      setStatus("Login no session (auth key/settings).", true, true);
+      setBadge("❌ No session after login", false);
       return;
     }
 
-    currentUser = sessionUser;
-    setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
+    currentUser = user;
+    setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"));
     toggleUI(true);
 
     await afterLogin();
@@ -117,7 +119,6 @@
     const { error } = await supabaseClient.auth.signOut();
     if (error) {
       setStatus("Logout failed: " + error.message, true, true);
-      setBadge("❌ Logout failed: " + error.message, false);
       return;
     }
     currentUser = null;
@@ -125,33 +126,25 @@
     setCurrentJobNo(null);
     toggleUI(false);
     setStatus("Signed out.", false, true);
-    setBadge("Signed out.", true);
+    setBadge("Signed out.");
   }
 
   async function restoreSession() {
-    setStatus("Checking session...");
-    const { data, error } = await supabaseClient.auth.getSession();
-    if (error) {
-      setStatus("Session error: " + error.message, true, true);
-      setBadge("❌ Session error: " + error.message, false);
-      toggleUI(false);
-      return;
-    }
+    const { data } = await supabaseClient.auth.getSession();
     if (data?.session?.user) {
       currentUser = data.session.user;
-      setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
+      setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"));
       toggleUI(true);
       await afterLogin();
-      return;
+    } else {
+      toggleUI(false);
+      setStatus("Ready.");
     }
-    currentUser = null;
-    toggleUI(false);
-    setStatus("Ready.");
   }
 
   async function loadBranches() {
     const ddl = byId("branch");
-    if (!ddl) return { ok: false, msg: "UI missing #branch (index.html not updated)" };
+    if (!ddl) return { ok: false, msg: "UI missing #branch" };
 
     const { data, error } = await supabaseClient
       .from("branches")
@@ -188,7 +181,7 @@
 
   async function loadJobs() {
     const tbody = byId("jobsTableBody");
-    if (!tbody) return { ok: false, msg: "UI missing #jobsTableBody (index.html not updated)" };
+    if (!tbody) return { ok: false, msg: "UI missing #jobsTableBody" };
 
     const { data, error } = await supabaseClient
       .from("jobs")
@@ -223,27 +216,20 @@
   }
 
   async function createJob() {
-    const country = (byId("country")?.value || "").trim();
-    const branch = (byId("branch")?.value || "").trim();
-    const transport = (byId("transport_mode")?.value || "").trim();
-    const jobType = (byId("job_type")?.value || "").trim();
-    const customer = (byId("customer")?.value || "").trim();
-
     setStatus("Creating job...");
+    const payload = {
+      p_country_code: (byId("country")?.value || "").trim(),
+      p_branch_code: (byId("branch")?.value || "").trim(),
+      p_transport_mode: (byId("transport_mode")?.value || "").trim(),
+      p_job_type: (byId("job_type")?.value || "").trim(),
+      p_customer_name: (byId("customer")?.value || "").trim()
+    };
 
-    const { data, error } = await supabaseClient.rpc("create_job", {
-      p_country_code: country,
-      p_branch_code: branch,
-      p_transport_mode: transport,
-      p_job_type: jobType,
-      p_customer_name: customer
-    });
-
+    const { data, error } = await supabaseClient.rpc("create_job", payload);
     if (error) {
       setStatus("Create job failed: " + error.message, true, true);
       return;
     }
-
     setStatus("Job created: " + (data?.job_no || "OK"));
     await loadJobs();
   }
@@ -259,7 +245,6 @@
     }
 
     setStatus("Loading charges...");
-
     const { data, error } = await supabaseClient
       .from("charges")
       .select("*")
@@ -291,20 +276,17 @@
       setStatus("Select a job first before adding charge.", true, true);
       return;
     }
-
     const chargeCode = (byId("charge_code")?.value || "").trim();
-    const amountRaw = (byId("amount")?.value || "").trim();
+    const amount = parseFloat((byId("amount")?.value || "").trim());
     const currency = (byId("currency")?.value || "").trim();
     const type = (byId("charge_type")?.value || "").trim();
 
-    const amount = parseFloat(amountRaw);
     if (!chargeCode || !currency || !type || !Number.isFinite(amount)) {
-      setStatus("Charge fields invalid (code/amount/currency/type).", true, true);
+      setStatus("Charge fields invalid.", true, true);
       return;
     }
 
     setStatus("Adding charge...");
-
     const { error } = await supabaseClient.from("charges").insert([{
       job_id: currentJobId,
       charge_code: chargeCode,
@@ -324,21 +306,20 @@
 
   async function afterLogin() {
     setStatus("Loading data...");
-
     const r1 = await loadBranches();
-    if (!r1.ok) { setStatus("✅ Logged in, but " + r1.msg, true, true); return; }
+    if (!r1.ok) return setStatus("Logged in, but " + r1.msg, true, true);
 
     const r2 = await loadUserProfileDefaultBranch();
-    if (!r2.ok) { setStatus("✅ Logged in, but " + r2.msg, true, true); return; }
+    if (!r2.ok) return setStatus("Logged in, but " + r2.msg, true, true);
 
     const r3 = await loadJobs();
-    if (!r3.ok) { setStatus("✅ Logged in, but " + r3.msg, true, true); return; }
+    if (!r3.ok) return setStatus("Logged in, but " + r3.msg, true, true);
 
     setStatus("✅ Logged in and data loaded.");
   }
 
   function wireEvents() {
-    // Menlo/SafeView-proof: pointerdown capture
+    // Menlo/SafeView-safe: pointerdown CAPTURE
     document.addEventListener("pointerdown", (e) => {
       const btn = e.target?.closest ? e.target.closest("button") : null;
       if (!btn) return;
@@ -347,20 +328,10 @@
         case "btnLogin": e.preventDefault(); signIn(); break;
         case "btnLogout":
         case "btnSignOut": e.preventDefault(); signOut(); break;
-
         case "btnCreateJob": e.preventDefault(); createJob(); break;
         case "btnRefreshJobs": e.preventDefault(); loadJobs(); break;
-
         case "btnRefreshCharges": e.preventDefault(); loadCharges(); break;
         case "btnAddCharge": e.preventDefault(); addCharge(); break;
-
-        case "btnDraftInvoice":
-        case "btnRefreshProfit":
-        case "btnAddMilestone":
-        case "btnRefreshJobDetails":
-          e.preventDefault();
-          setStatus("This button is placeholder (next module).", true, true);
-          break;
       }
     }, true);
 
@@ -372,28 +343,22 @@
     });
 
     // Debug helpers
-    window.__cw_login = signIn;
-    window.__cw_logout = signOut;
-    window.__cw_session = async () => {
-      const r = await supabaseClient.auth.getSession();
-      console.log("SESSION:", r.data.session);
-      console.log("EMAIL:", r.data.session?.user?.email);
-      return r;
-    };
+    window.__cw_ping = () => console.log(BUILD);
+    window.__cw_session = async () => supabaseClient.auth.getSession().then(r => (console.log(r.data.session), r));
   }
 
   async function init() {
     await initSupabase();
     wireEvents();
-    await restoreSession();
+    if (supabaseClient) await restoreSession();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     init().catch((e) => {
       console.error(e);
       setStatus("Init failed: " + (e.message || e), true, true);
-      setBadge("❌ Init failed: " + (e.message || e), false);
       toggleUI(false);
     });
   });
 })();
+``
