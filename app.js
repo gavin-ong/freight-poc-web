@@ -1,11 +1,10 @@
 // If app.js executes, this MUST exist:
-window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) executed");
+window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3C (JS) executed");
 
 (function () {
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const BUILD = "RECOVERY-3B (JS)";
 
   let client = null;
   let user = null;
@@ -27,11 +26,18 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
     el.style.color = ok ? "#9fffb0" : "#ff7b7b";
   }
 
+  // ✅ FIX: toggle the hidden class properly
   function showApp(loggedIn) {
-    $("loginCard") && ($("loginCard").style.display = loggedIn ? "none" : "");
-    $("appCard") && ($("appCard").style.display = loggedIn ? "" : "none");
-    $("btnLogin") && $("btnLogin").classList.toggle("hidden", loggedIn);
-    $("btnLogout") && $("btnLogout").classList.toggle("hidden", !loggedIn);
+    const loginCard = $("loginCard");
+    const appCard = $("appCard");
+    const btnLogin = $("btnLogin");
+    const btnLogout = $("btnLogout");
+
+    if (loginCard) loginCard.classList.toggle("hidden", loggedIn);
+    if (appCard) appCard.classList.toggle("hidden", !loggedIn);
+
+    if (btnLogin) btnLogin.classList.toggle("hidden", loggedIn);
+    if (btnLogout) btnLogout.classList.toggle("hidden", !loggedIn);
   }
 
   function setCurrentJob(jobNo) {
@@ -51,7 +57,7 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
   }
 
   async function initSupabase() {
-    console.log("✅ app.js executing:", BUILD);
+    console.log("✅ app.js executing: RECOVERY-3C");
     status("Loading Supabase JS...");
 
     if (!window.supabase || !window.supabase.createClient) {
@@ -68,7 +74,10 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
   }
 
   function creds() {
-    return { email: ($("email")?.value || "").trim(), password: $("password")?.value || "" };
+    return {
+      email: ($("email")?.value || "").trim(),
+      password: $("password")?.value || ""
+    };
   }
 
   async function signIn() {
@@ -155,7 +164,11 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
     const tbody = $("jobsTableBody");
     if (!tbody) return status("UI missing #jobsTableBody.", true);
 
-    const { data, error } = await client.from("jobs").select("*").order("created_at", { ascending: false });
+    const { data, error } = await client
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
     if (error) return status("jobs blocked: " + error.message, true);
 
     tbody.innerHTML = "";
@@ -237,10 +250,15 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
     const currency = ($("currency")?.value || "").trim();
     const type = ($("charge_type")?.value || "").trim();
 
-    if (!charge_code || !currency || !type || !Number.isFinite(amount)) return status("Invalid charge fields.", true);
+    if (!charge_code || !currency || !type || !Number.isFinite(amount)) {
+      return status("Invalid charge fields.", true);
+    }
 
     status("Adding charge...");
-    const { error } = await client.from("charges").insert([{ job_id: currentJobId, charge_code, amount, currency, type }]);
+    const { error } = await client
+      .from("charges")
+      .insert([{ job_id: currentJobId, charge_code, amount, currency, type }]);
+
     if (error) return status("Add charge failed: " + error.message, true);
 
     status("Charge added.");
@@ -256,7 +274,7 @@ window.__cw_ping = () => console.log("✅ __cw_ping OK — RECOVERY-3B (JS) exec
   }
 
   function wire() {
-    // Menlo/SafeView-safe: pointerdown capture
+    // Menlo/SafeView safe: pointerdown capture
     document.addEventListener("pointerdown", (e) => {
       const btn = e.target?.closest ? e.target.closest("button") : null;
       if (!btn) return;
