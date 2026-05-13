@@ -5,46 +5,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CargoWise-ish MVP</title>
 
-  <!-- CW-MVP BUILD: 2026-05-13e -->
   <style>
     :root{
-      --bg1:#071224;
-      --bg2:#0a2a45;
-      --card:#0b1a33cc;
-      --border:#1e3a5f;
-      --text:#e9f1ff;
-      --muted:#9fb6d7;
-      --ok:#9fffb0;
-      --err:#ff7b7b;
+      --bg1:#071224; --bg2:#0a2a45;
+      --card:#0b1a33cc; --text:#e9f1ff; --muted:#9fb6d7;
+      --ok:#9fffb0; --err:#ff7b7b;
       --shadow:0 20px 60px rgba(0,0,0,.45);
       --radius:16px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", sans-serif;
     }
     *{box-sizing:border-box}
     body{
-      margin:0;
-      font-family:var(--sans);
-      color:var(--text);
-      min-height:100vh;
+      margin:0; font-family:var(--sans); color:var(--text); min-height:100vh;
       background:
         radial-gradient(900px 500px at 20% 30%, rgba(35,110,255,.35), transparent 60%),
         radial-gradient(800px 500px at 75% 70%, rgba(0,255,225,.18), transparent 55%),
         linear-gradient(180deg, var(--bg1), var(--bg2));
-      display:flex;
-      align-items:flex-start;
-      justify-content:center;
-      padding:54px 16px;
+      display:flex; align-items:flex-start; justify-content:center; padding:54px 16px;
     }
-    .wrap{
-      width:min(1040px, 100%);
-      display:grid;
-      grid-template-columns: 1fr;
-      gap:18px;
-      justify-items:center;
-    }
+    .wrap{ width:min(1040px,100%); display:grid; grid-template-columns:1fr; gap:18px; justify-items:center; }
     .card{
-      width:min(760px, 100%);
+      width:min(760px,100%);
       background:var(--card);
       border:1px solid rgba(255,255,255,.08);
       border-radius:var(--radius);
@@ -53,18 +35,13 @@
       backdrop-filter: blur(10px);
     }
     .cardHeader{
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:18px 18px 12px;
+      display:flex; align-items:center; gap:12px; padding:18px 18px 12px;
       border-bottom:1px solid rgba(255,255,255,.06);
       background:linear-gradient(180deg, rgba(255,255,255,.03), transparent);
     }
-    .logo{
-      width:28px;height:28px;border-radius:10px;
+    .logo{ width:28px;height:28px;border-radius:10px;
       background:linear-gradient(135deg, rgba(63,187,255,1), rgba(0,255,196,1));
-      box-shadow:0 10px 20px rgba(0,255,196,.12);
-      flex:0 0 auto;
+      box-shadow:0 10px 20px rgba(0,255,196,.12); flex:0 0 auto;
     }
     .titleBox{line-height:1.1}
     .title{font-weight:700;font-size:14px}
@@ -72,30 +49,21 @@
     .cardBody{padding:18px}
     h2{margin:0 0 14px;font-size:14px;letter-spacing:.2px}
     label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
-    input, select{
-      width:100%;
-      height:38px;
-      border-radius:10px;
+    input,select{
+      width:100%; height:38px; border-radius:10px;
       border:1px solid rgba(255,255,255,.10);
       background:rgba(255,255,255,.07);
-      color:var(--text);
-      padding:0 12px;
-      outline:none;
+      color:var(--text); padding:0 12px; outline:none;
     }
-    input::placeholder{color:rgba(233,241,255,.45)}
     .row{display:grid; gap:10px}
     .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
     .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
     .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap}
     button{
-      cursor:pointer;
-      height:36px;
-      border-radius:10px;
+      cursor:pointer; height:36px; border-radius:10px;
       border:1px solid rgba(255,255,255,.10);
-      color:var(--text);
-      background:rgba(255,255,255,.08);
-      padding:0 14px;
-      font-weight:600;
+      color:var(--text); background:rgba(255,255,255,.08);
+      padding:0 14px; font-weight:600;
     }
     .btn.primary{background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));}
     .btn.good{background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));}
@@ -106,12 +74,14 @@
     .section{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
     .chip{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(15,36,70,.8);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
     table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
-    th, td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;vertical-align:top}
+    th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left}
     th{color:var(--muted); font-weight:700}
     tr:hover{background:rgba(255,255,255,.03)}
-    .small{font-size:11px}
-    .mono{font-family:var(--mono)}
     .hidden{display:none}
+    .build{
+      margin-top:10px; font-size:11px; opacity:.75; color:var(--muted);
+      font-family:var(--mono);
+    }
   </style>
 </head>
 
@@ -146,7 +116,10 @@
         <div id="status" class="status muted">Ready.</div>
         <div id="loggedInBadge" class="badge"></div>
 
-        <div class="muted small" style="margin-top:10px;">
+        <!-- THIS is the non-view-source proof you deployed the right HTML -->
+        <div class="build" id="buildMarker">BUILD: 2026-05-13e (HTML)</div>
+
+        <div class="muted" style="margin-top:10px;">
           Tip: If login fails after role/branch changes, refresh once to reload session state.
         </div>
       </div>
@@ -163,14 +136,13 @@
       </div>
 
       <div class="cardBody">
-
         <div class="row2">
           <div>
             <label>Branch</label>
             <select id="branch"></select>
           </div>
           <div style="display:flex;align-items:flex-end;gap:10px;">
-            <span class="chip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
+            <span class="chip">Current Job: <span id="currentJobNo" style="font-family:var(--mono)">None</span></span>
           </div>
         </div>
 
@@ -217,20 +189,11 @@
           <table>
             <thead>
               <tr>
-                <th>Job No</th>
-                <th>Country</th>
-                <th>Branch</th>
-                <th>Mode</th>
-                <th>Type</th>
-                <th>Customer</th>
+                <th>Job No</th><th>Country</th><th>Branch</th><th>Mode</th><th>Type</th><th>Customer</th>
               </tr>
             </thead>
             <tbody id="jobsTableBody"></tbody>
           </table>
-
-          <div class="muted small" style="margin-top:8px;">
-            Tip: Click a job row to select it (loads charges).
-          </div>
         </div>
 
         <!-- CHARGES -->
@@ -272,37 +235,18 @@
           </div>
 
           <table>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Amount</th>
-                <th>Currency</th>
-                <th>Type</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Code</th><th>Amount</th><th>Currency</th><th>Type</th></tr></thead>
             <tbody id="chargesTableBody"></tbody>
           </table>
 
-          <div class="muted small" style="margin-top:8px;">
-            Tip: Select a job first. Charges are tied to the selected job.
-          </div>
+          <div class="build" id="buildMarker2">BUILD: 2026-05-13e (UI has jobsTableBody)</div>
         </div>
-
-        <!-- MILESTONES placeholder -->
-        <div class="section">
-          <h2>Milestones</h2>
-          <div class="btnBar">
-            <button id="btnAddMilestone" class="btn">Add</button>
-          </div>
-          <div class="muted small">Placeholder (we wire this next).</div>
-        </div>
-
       </div>
     </div>
 
   </div>
 
-  <!-- IMPORTANT: Correct script tag -->
+  <!-- ✅ Correct script tag (this is what was broken before) -->
   <script src="./app.js?v=20260513e"></script>
 </body>
 </html>
