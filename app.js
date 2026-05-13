@@ -1,21 +1,12 @@
-/* =========================================================
-   CW-MVP app.js v2026-05-13e (MATCHED TO PROVIDED index.html)
-   - Supabase URL + key embedded
-   - Login/logout works with Menlo/SafeView (pointerdown capture)
-   - UI toggle loginCard/appCard
-   - Branches + public.users profile + Jobs + Charges wired
-   ========================================================= */
-
 (function () {
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const APP_VERSION = "app.js v2026-05-13e";
+  const APP_VERSION = "BUILD: 2026-05-13e (JS)";
 
   let supabaseClient = null;
   let currentUser = null;
   let currentJobId = null;
-  let currentJobNo = null;
 
   const byId = (id) => document.getElementById(id);
 
@@ -28,11 +19,6 @@
     } else {
       (isError ? console.error : console.log)(msg);
     }
-  }
-
-  function isStickyStatus() {
-    const el = byId("status");
-    return !!(el && el.dataset.sticky === "1");
   }
 
   function setBadge(msg, ok = true) {
@@ -56,11 +42,9 @@
     if (btnSignOut) btnSignOut.classList.toggle("hidden", !isLoggedIn);
   }
 
-  function setCurrentJob(job) {
-    currentJobId = job?.job_id ?? job?.id ?? null;
-    currentJobNo = job?.job_no ?? null;
-    const chip = byId("currentJobNo");
-    if (chip) chip.textContent = currentJobNo || "None";
+  function setCurrentJobNo(jobNo) {
+    const el = byId("currentJobNo");
+    if (el) el.textContent = jobNo || "None";
   }
 
   function loadScript(src) {
@@ -74,13 +58,6 @@
     });
   }
 
-  function getEmailPassword() {
-    return {
-      email: (byId("email")?.value || "").trim(),
-      password: byId("password")?.value || ""
-    };
-  }
-
   async function initSupabase() {
     if (!window.supabase || !window.supabase.createClient) {
       setStatus("Loading Supabase library...");
@@ -90,16 +67,19 @@
       setStatus("Supabase library failed to load.", true, true);
       throw new Error("Supabase createClient missing");
     }
-
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.supabaseClient = supabaseClient; // debug
     console.log(APP_VERSION);
-    if (!isStickyStatus()) setStatus("Ready.");
+    setStatus("Ready.");
   }
 
-  // -------------------------------
-  // AUTH
-  // -------------------------------
+  function getEmailPassword() {
+    return {
+      email: (byId("email")?.value || "").trim(),
+      password: byId("password")?.value || ""
+    };
+  }
+
   async function signIn() {
     const { email, password } = getEmailPassword();
     if (!email || !password) {
@@ -119,9 +99,8 @@
 
     const s = await supabaseClient.auth.getSession();
     const sessionUser = s?.data?.session?.user || data?.user || null;
-
     if (!sessionUser) {
-      setStatus("Login did not create a session (key/auth settings issue).", true, true);
+      setStatus("Login did not create a session (auth key/settings).", true, true);
       setBadge("❌ No session created after login", false);
       return;
     }
@@ -142,7 +121,8 @@
       return;
     }
     currentUser = null;
-    setCurrentJob(null);
+    currentJobId = null;
+    setCurrentJobNo(null);
     toggleUI(false);
     setStatus("Signed out.", false, true);
     setBadge("Signed out.", true);
@@ -157,7 +137,6 @@
       toggleUI(false);
       return;
     }
-
     if (data?.session?.user) {
       currentUser = data.session.user;
       setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
@@ -165,18 +144,14 @@
       await afterLogin();
       return;
     }
-
     currentUser = null;
     toggleUI(false);
-    if (!isStickyStatus()) setStatus("Ready.");
+    setStatus("Ready.");
   }
 
-  // -------------------------------
-  // DATA LOADERS
-  // -------------------------------
   async function loadBranches() {
     const ddl = byId("branch");
-    if (!ddl) return { ok: true };
+    if (!ddl) return { ok: false, msg: "UI missing #branch (index.html not updated)" };
 
     const { data, error } = await supabaseClient
       .from("branches")
@@ -198,10 +173,8 @@
   }
 
   async function loadUserProfileDefaultBranch() {
-    if (!currentUser) return { ok: false, msg: "No user" };
-
     const { data, error } = await supabaseClient
-      .from("users") // public.users
+      .from("users")
       .select("branch_code, role")
       .eq("id", currentUser.id)
       .single();
@@ -210,13 +183,12 @@
 
     const ddl = byId("branch");
     if (ddl && data?.branch_code) ddl.value = data.branch_code;
-
     return { ok: true };
   }
 
   async function loadJobs() {
     const tbody = byId("jobsTableBody");
-    if (!tbody) return { ok: false, msg: "UI missing jobsTableBody (index.html not updated)" };
+    if (!tbody) return { ok: false, msg: "UI missing #jobsTableBody (index.html not updated)" };
 
     const { data, error } = await supabaseClient
       .from("jobs")
@@ -228,8 +200,8 @@
     tbody.innerHTML = "";
     (data || []).forEach((job) => {
       const tr = document.createElement("tr");
-      tr.dataset.jobId = job.job_id ?? job.id ?? "";
-      tr.dataset.jobNo = job.job_no ?? "";
+      const jid = job.job_id ?? job.id ?? null;
+      const jno = job.job_no ?? "";
       tr.innerHTML = `
         <td>${job.job_no ?? ""}</td>
         <td>${job.country_code ?? ""}</td>
@@ -238,13 +210,12 @@
         <td>${job.job_type ?? ""}</td>
         <td>${job.customer_name ?? ""}</td>
       `;
-
       tr.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        setCurrentJob(job);
-        loadChargesForCurrentJob();
+        currentJobId = jid;
+        setCurrentJobNo(jno);
+        loadCharges();
       }, true);
-
       tbody.appendChild(tr);
     });
 
@@ -277,13 +248,13 @@
     await loadJobs();
   }
 
-  async function loadChargesForCurrentJob() {
+  async function loadCharges() {
     const tbody = byId("chargesTableBody");
     if (!tbody) return;
 
     if (!currentJobId) {
       tbody.innerHTML = "";
-      setStatus("Select a job first to load charges.", true, true);
+      setStatus("Select a job to load charges.", true, true);
       return;
     }
 
@@ -348,7 +319,7 @@
     }
 
     setStatus("Charge added.");
-    await loadChargesForCurrentJob();
+    await loadCharges();
   }
 
   async function afterLogin() {
@@ -366,27 +337,31 @@
     setStatus("✅ Logged in and data loaded.");
   }
 
-  // -------------------------------
-  // EVENT WIRING (Menlo/SafeView proof)
-  // -------------------------------
   function wireEvents() {
+    // Menlo/SafeView-proof: pointerdown capture
     document.addEventListener("pointerdown", (e) => {
       const btn = e.target?.closest ? e.target.closest("button") : null;
       if (!btn) return;
 
-      const id = btn.id || "";
-      if (id === "btnLogin") { e.preventDefault(); signIn(); }
-      if (id === "btnLogout" || id === "btnSignOut") { e.preventDefault(); signOut(); }
+      switch (btn.id) {
+        case "btnLogin": e.preventDefault(); signIn(); break;
+        case "btnLogout":
+        case "btnSignOut": e.preventDefault(); signOut(); break;
 
-      if (id === "btnCreateJob") { e.preventDefault(); createJob(); }
-      if (id === "btnRefreshJobs") { e.preventDefault(); loadJobs(); }
-      if (id === "btnRefreshCharges") { e.preventDefault(); loadChargesForCurrentJob(); }
-      if (id === "btnAddCharge") { e.preventDefault(); addCharge(); }
+        case "btnCreateJob": e.preventDefault(); createJob(); break;
+        case "btnRefreshJobs": e.preventDefault(); loadJobs(); break;
 
-      // placeholders
-      if (id === "btnDraftInvoice") { e.preventDefault(); setStatus("Invoice draft: next module (not wired yet).", true, true); }
-      if (id === "btnRefreshProfit") { e.preventDefault(); setStatus("Profit: next module (not wired yet).", true, true); }
-      if (id === "btnAddMilestone") { e.preventDefault(); setStatus("Milestones: next module (not wired yet).", true, true); }
+        case "btnRefreshCharges": e.preventDefault(); loadCharges(); break;
+        case "btnAddCharge": e.preventDefault(); addCharge(); break;
+
+        case "btnDraftInvoice":
+        case "btnRefreshProfit":
+        case "btnAddMilestone":
+        case "btnRefreshJobDetails":
+          e.preventDefault();
+          setStatus("This button is placeholder (next module).", true, true);
+          break;
+      }
     }, true);
 
     document.addEventListener("keydown", (e) => {
