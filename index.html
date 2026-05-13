@@ -1,236 +1,625 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Freight PRD POC</title>
+  <title>CargoWise-ish MVP (Supabase)</title>
 
-  <!-- ✅ Correct Supabase script include (fixed) -->
+  <!-- Supabase JS (v2) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; margin: 12px; }
-    .top { margin-bottom: 10px; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    input, select, button { padding: 4px 6px; font-size: 12px; }
-    .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
-    .card { border:1px solid #ccc; padding:10px; border-radius:4px; }
-    .muted { color:#666; font-size: 11px; }
-    h3 { margin: 0 0 8px 0; font-size: 14px; }
-    hr { margin: 10px 0; }
-    ul { margin: 6px 0 0 18px; }
-    .jobs { margin-top: 12px; }
-    .small { font-size: 11px; }
-    textarea { width: 100%; min-height: 70px; font-size: 12px; padding: 6px; }
-    .w120 { width: 120px; }
-    .w140 { width: 140px; }
-    .w160 { width: 160px; }
-    .w200 { width: 200px; }
-    .w260 { width: 260px; }
-    .pill { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:11px; }
-    .kpi { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
-    .kpi .pill b { margin-right:6px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .table { width:100%; border-collapse: collapse; margin-top:8px; }
-    .table th, .table td { border:1px solid #eee; padding:6px; font-size:12px; text-align:left; }
-    .table th { background:#fafafa; }
+    :root{
+      --bg:#0b1220;
+      --card:#101a33;
+      --card2:#0f1930;
+      --text:#e7ecff;
+      --muted:#a7b2d6;
+      --line: rgba(255,255,255,.10);
+      --accent:#7aa2ff;
+      --good:#43d19e;
+      --warn:#ffcc66;
+      --bad:#ff6b6b;
+      --chip:#1a2a54;
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 700px at 10% 0%, #1a2a54 0%, var(--bg) 60%);
+      color:var(--text);
+    }
+    a{ color:var(--accent); }
+    .container{ max-width:1200px; margin:0 auto; padding:18px; }
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; padding:14px 16px; border:1px solid var(--line);
+      border-radius:16px; background: rgba(16,26,51,.72); box-shadow: var(--shadow);
+      position:sticky; top:12px; backdrop-filter: blur(10px); z-index:10;
+    }
+    .brand{ display:flex; align-items:center; gap:10px; }
+    .logo{
+      width:36px; height:36px; border-radius:12px;
+      background: linear-gradient(135deg, #7aa2ff 0%, #43d19e 100%);
+      box-shadow: 0 10px 20px rgba(0,0,0,.25);
+    }
+    .brand h1{ font-size:16px; margin:0; letter-spacing:.2px; }
+    .brand small{ color:var(--muted); display:block; margin-top:2px; }
+
+    .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .chip{
+      display:inline-flex; gap:8px; align-items:center;
+      padding:7px 10px; border-radius:999px;
+      background: rgba(26,42,84,.75);
+      border:1px solid var(--line); color:var(--text);
+      font-size:12px;
+    }
+    .badge{
+      font-weight:700; letter-spacing:.3px;
+      padding:3px 8px; border-radius:999px;
+      background: rgba(122,162,255,.15);
+      border:1px solid rgba(122,162,255,.35);
+      color:var(--text);
+      font-size:12px;
+      text-transform:uppercase;
+    }
+    .badge.fin{
+      background: rgba(67,209,158,.15);
+      border:1px solid rgba(67,209,158,.35);
+    }
+    .badge.ops{
+      background: rgba(255,204,102,.12);
+      border:1px solid rgba(255,204,102,.35);
+    }
+
+    .btn{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:600;
+      transition: transform .05s ease, background .15s ease, border-color .15s ease;
+      user-select:none;
+    }
+    .btn:hover{ background: rgba(255,255,255,.09); }
+    .btn:active{ transform: translateY(1px); }
+    .btn.primary{
+      background: rgba(122,162,255,.18);
+      border-color: rgba(122,162,255,.40);
+    }
+    .btn.good{
+      background: rgba(67,209,158,.16);
+      border-color: rgba(67,209,158,.40);
+    }
+    .btn.warn{
+      background: rgba(255,204,102,.12);
+      border-color: rgba(255,204,102,.38);
+    }
+    .btn.bad{
+      background: rgba(255,107,107,.12);
+      border-color: rgba(255,107,107,.40);
+    }
+    .btn[disabled]{
+      opacity:.55; cursor:not-allowed;
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:14px;
+      margin-top:14px;
+    }
+    @media (max-width: 980px){
+      .grid2{ grid-template-columns: 1fr; }
+      .topbar{ position:relative; top:auto; }
+    }
+    .card{
+      border:1px solid var(--line);
+      background: rgba(16,26,51,.72);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      border-bottom:1px solid var(--line);
+      background: rgba(10,18,36,.35);
+    }
+    .card .hd h2{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.2px;
+    }
+    .card .bd{ padding:14px 16px; }
+
+    .form-grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:10px;
+    }
+    .field{ grid-column: span 6; }
+    .field.sm{ grid-column: span 3; }
+    .field.lg{ grid-column: span 12; }
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin:0 0 6px;
+    }
+    input, select, textarea{
+      width:100%;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      outline:none;
+    }
+    textarea{ min-height: 72px; resize: vertical; }
+    input::placeholder, textarea::placeholder{ color: rgba(231,236,255,.45); }
+
+    .hint{ font-size:12px; color:var(--muted); margin-top:8px; }
+    .split{
+      display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+
+    .table-wrap{
+      border:1px solid var(--line);
+      border-radius:14px;
+      overflow:auto;
+      background: rgba(15,25,48,.55);
+    }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{
+      padding:10px 10px;
+      border-bottom:1px solid rgba(255,255,255,.07);
+      text-align:left;
+      white-space:nowrap;
+    }
+    th{ color:var(--muted); font-weight:700; font-size:11px; letter-spacing:.3px; }
+    tr:hover td{ background: rgba(255,255,255,.04); }
+    .muted{ color:var(--muted); }
+
+    .two-col{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:14px;
+    }
+    @media (max-width: 980px){
+      .two-col{ grid-template-columns:1fr; }
+    }
+
+    .kpi{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:10px;
+    }
+    @media (max-width: 700px){ .kpi{ grid-template-columns:1fr; } }
+
+    .kpi .box{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      background: rgba(255,255,255,.05);
+    }
+    .kpi .box .t{ color:var(--muted); font-size:11px; margin-bottom:6px; }
+    .kpi .box .v{ font-weight:800; font-size:16px; letter-spacing:.2px; }
+    .kpi .box.good .v{ color: var(--good); }
+    .kpi .box.bad .v{ color: var(--bad); }
+
+    .sep{ height:1px; background: var(--line); margin:14px 0; }
+
+    /* Auth view */
+    .auth-wrap{
+      max-width:520px;
+      margin: 54px auto 0;
+    }
+    .auth-title{ margin:0 0 10px; font-size:18px; }
+    .toast{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      display:none;
+    }
+    .toast.show{ display:block; }
+    .toast.good{ border-color: rgba(67,209,158,.35); background: rgba(67,209,158,.10); }
+    .toast.bad{ border-color: rgba(255,107,107,.35); background: rgba(255,107,107,.10); }
   </style>
 </head>
 
 <body>
-
-  <div class="top">
-    <h3>Login</h3>
-    <div class="row">
-      <input id="email" class="w260" placeholder="Email" autocomplete="username" />
-      <input id="password" class="w200" type="password" placeholder="Password" autocomplete="current-password" />
-      <button onclick="login()">Login</button>
-      <span id="loginStatus" class="muted"></span>
-      <span id="userRoleBadge" class="pill muted" style="display:none;"></span>
-    </div>
-  </div>
-
-  <div class="grid">
-    <!-- LEFT: Create Job -->
-    <div class="card">
-      <h3>Create Job (CargoWise Format)</h3>
-
-      <div class="row">
-        <label class="small">Branch</label>
-        <select id="branchKey" class="w200" disabled>
-          <option value="">Login to load branches...</option>
-        </select>
-
-        <label class="small">Mode</label>
-        <select id="mode" class="w120">
-          <option value="SEA">SEA (S)</option>
-          <option value="AIR">AIR (A)</option>
-          <option value="LAND">LAND (L)</option>
-          <option value="INTEGRATED">INTEGRATED (I)</option>
-        </select>
-
-        <label class="small">Job Type</label>
-        <select id="jobType" class="w120">
-          <option value="EXPORT">EXPORT (O)</option>
-          <option value="IMPORT">IMPORT (I)</option>
-        </select>
-
-        <label class="small">Incoterm</label>
-        <select id="incoterm" class="w120">
-          <option value="FOB">FOB</option>
-          <option value="CIF">CIF</option>
-          <option value="EXW">EXW</option>
-        </select>
+  <!-- AUTH VIEW -->
+  <div id="authView" class="container">
+    <div class="auth-wrap card">
+      <div class="hd">
+        <div class="brand">
+          <div class="logo"></div>
+          <div>
+            <h1>CargoWise-ish MVP</h1>
+            <small class="muted">Login to manage jobs, charges & invoices</small>
+          </div>
+        </div>
       </div>
 
-      <div class="row">
-        <input id="customer" class="w200" placeholder="Customer Name (e.g. CUST-001)" />
-        <input id="origin" class="w160" placeholder="Origin Country (e.g. CN)" />
-        <input id="destination" class="w160" placeholder="Destination Country (e.g. SG)" />
-        <button onclick="createJob()">Create Job</button>
-      </div>
-
-      <div class="row muted">
-        <span>Job no generated by DB RPC</span>
-        <span>YYMM follows branch-local date</span>
-      </div>
-    </div>
-
-    <!-- RIGHT: Shipment + Milestones -->
-    <div class="card">
-      <h3>Shipment + Milestones</h3>
-
-      <div class="row">
-        <label class="small">Job</label>
-        <select id="jobSelect" class="w260" disabled>
-          <option value="">Login to load jobs...</option>
-        </select>
-        <button onclick="reloadJobs()">Reload Jobs</button>
-      </div>
-
-      <div class="row">
-        <input id="pol" class="w140" placeholder="POL (e.g. CNSHA)" />
-        <input id="pod" class="w140" placeholder="POD (e.g. SGSIN)" />
-        <input id="carrier" class="w140" placeholder="Carrier (e.g. PIL)" />
-        <input id="vessel" class="w160" placeholder="Vessel/Flight (e.g. KOTA XX)" />
-      </div>
-
-      <div class="row">
-        <input id="bookingNo" class="w140" placeholder="Booking No" />
-        <input id="blAwbNo" class="w140" placeholder="BL/AWB No" />
-        <input id="voyage" class="w140" placeholder="Voyage (optional)" />
-        <button onclick="createShipment()">Create Shipment</button>
-      </div>
-
-      <hr />
-
-      <div class="row">
-        <label class="small">Shipment</label>
-        <select id="shipmentSelect" class="w260" disabled>
-          <option value="">Select a job first...</option>
-        </select>
-        <button onclick="reloadShipments()">Reload Shipments</button>
-      </div>
-
-      <div class="row">
-        <label class="small">Event</label>
-        <select id="eventName" class="w120">
-          <option value="ETD">ETD</option>
-          <option value="ATD">ATD</option>
-          <option value="ETA">ETA</option>
-          <option value="ATA">ATA</option>
-          <option value="GATE_IN">GATE_IN</option>
-          <option value="LOADED">LOADED</option>
-          <option value="DEPARTED">DEPARTED</option>
-          <option value="ARRIVED">ARRIVED</option>
-        </select>
-
-        <input id="eventTime" type="datetime-local" class="w200" />
-        <input id="eventLocation" class="w200" placeholder="Location (optional)" />
-        <button onclick="addEvent()">Add Event</button>
-      </div>
-
-      <div class="row">
-        <textarea id="eventRemarks" placeholder="Remarks (optional)"></textarea>
-      </div>
-
-      <div class="muted">Times displayed using the selected job’s branch timezone.</div>
-    </div>
-  </div>
-
-  <!-- NEW THIRD CARD (C): Charges + Invoice -->
-  <div class="card" style="margin-top:12px;">
-    <h3>Charges + Invoice (B5)</h3>
-
-    <div class="row muted">
-      <span class="pill">Invoice currency: <b>USD</b> (converted per line using invoice-date FX)</span>
-      <span class="pill">Only <b>FIN</b> can generate invoice draft</span>
-    </div>
-
-    <hr />
-
-    <div class="row">
-      <label class="small">Side</label>
-      <select id="chargeSide" class="w120">
-        <option value="SELL">SELL</option>
-        <option value="BUY">BUY</option>
-      </select>
-
-      <input id="chargeCode" class="w120" placeholder="Charge Code (e.g. OFR)" />
-      <input id="chargeDesc" class="w260" placeholder="Description (e.g. Ocean Freight)" />
-
-      <input id="chargeQty" class="w120" type="number" step="0.0001" value="1" />
-      <input id="chargeUnitPrice" class="w140" type="number" step="0.000001" placeholder="Unit Price" />
-
-      <label class="small">Currency</label>
-      <select id="chargeCurrency" class="w120" disabled>
-        <option value="">Loading...</option>
-      </select>
-
-      <button onclick="addCharge()">Add Charge</button>
-    </div>
-
-    <div class="kpi">
-      <span class="pill mono"><b>SELL USD</b> <span id="kpiSellUsd">-</span></span>
-      <span class="pill mono"><b>BUY USD</b> <span id="kpiBuyUsd">-</span></span>
-      <span class="pill mono"><b>PROFIT USD</b> <span id="kpiProfitUsd">-</span></span>
-    </div>
-
-    <div class="row" style="margin-top:10px;">
-      <button id="btnGenerateInvoice" onclick="generateInvoiceDraft()" disabled>Generate Invoice Draft (FIN only)</button>
-      <span id="invoiceStatus" class="muted"></span>
-    </div>
-
-    <hr />
-
-    <div class="row">
-      <div style="flex:1;">
-        <h3 style="margin-top:0;">Charges (Selected Job)</h3>
-        <div id="chargesArea" class="muted">Select a job to load charges.</div>
-      </div>
-      <div style="flex:1;">
-        <h3 style="margin-top:0;">Latest Invoice Lines (Selected Job)</h3>
-        <div id="invoiceArea" class="muted">Select a job to load invoice lines.</div>
+      <div class="bd">
+        <h2 class="auth-title">Sign in</h2>
+        <div class="form-grid">
+          <div class="field lg">
+            <label>Email</label>
+            <input id="loginEmail" type="email" placeholder="you@company.com" autocomplete="username" />
+          </div>
+          <div class="field lg">
+            <label>Password</label>
+            <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+          </div>
+          <div class="field lg split">
+            <button id="btnLogin" class="btn primary">Login</button>
+            <button id="btnLogout" class="btn" style="display:none;">Logout</button>
+          </div>
+        </div>
+        <div id="authToast" class="toast"></div>
+        <div class="hint">
+          Tip: if login fails after role/branch changes, refresh once to reload session state.
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="jobs">
-    <h3>Jobs List</h3>
-    <div class="row">
-      <button onclick="loadJobsList()">Refresh Jobs</button>
-      <span class="muted">Shows latest 50</span>
+  <!-- APP VIEW -->
+  <div id="appView" class="container" style="display:none;">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>CargoWise-ish MVP</h1>
+          <small id="envHint" class="muted">Supabase connected • Jobs • Charges • Invoice draft</small>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="chip">
+          <span class="muted">User:</span>
+          <strong id="whoamiEmail">-</strong>
+        </span>
+        <span class="chip">
+          <span class="muted">Role:</span>
+          <span id="whoamiRole" class="badge">-</span>
+        </span>
+
+        <span class="chip">
+          <span class="muted">Branch:</span>
+          <select id="branchSelect" style="min-width:160px; padding:8px 10px;">
+            <option value="">Loading...</option>
+          </select>
+        </span>
+
+        <button id="btnSignOut" class="btn">Sign out</button>
+      </div>
     </div>
 
-    <ul id="jobsList"></ul>
+    <div class="grid2">
+      <!-- LEFT: CREATE JOB -->
+      <div class="card">
+        <div class="hd">
+          <h2>Create Job</h2>
+          <div class="row">
+            <span class="chip"><span class="muted">Selected:</span> <strong id="selectedJobNo">None</strong></span>
+          </div>
+        </div>
+        <div class="bd">
+          <!-- Keep your existing fields (app.js will wire to these IDs if used) -->
+          <div class="form-grid">
+            <div class="field sm">
+              <label>Transport Mode</label>
+              <select id="jobTransportMode">
+                <option value="S">Sea (S)</option>
+                <option value="A">Air (A)</option>
+                <option value="L">Land (L)</option>
+                <option value="I">Integrated (I)</option>
+              </select>
+            </div>
+            <div class="field sm">
+              <label>Job Type</label>
+              <select id="jobType">
+                <option value="O">Export (O)</option>
+                <option value="I">Import (I)</option>
+                <option value="D">Domestic (D)</option>
+              </select>
+            </div>
+            <div class="field sm">
+              <label>Customer</label>
+              <input id="jobCustomer" placeholder="Customer name/code" />
+            </div>
+            <div class="field sm">
+              <label>Incoterm</label>
+              <input id="jobIncoterm" placeholder="FOB/CIF/DDP..." />
+            </div>
 
-    <hr />
+            <div class="field lg">
+              <label>Commodity / Description</label>
+              <textarea id="jobCommodity" placeholder="What are we shipping?"></textarea>
+            </div>
 
-    <h3>Shipments + Events (Selected Job)</h3>
-    <div id="shipmentsArea" class="muted">Select a job to view shipments.</div>
+            <div class="field lg split">
+              <button id="btnCreateJob" class="btn good">Create Job</button>
+              <span class="muted" id="createJobStatus">Ready.</span>
+            </div>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="split" style="margin-bottom:10px;">
+            <div>
+              <strong>Jobs</strong>
+              <div class="muted" style="font-size:12px;">Click a row to select a job (then add charges / draft invoice)</div>
+            </div>
+            <div class="row">
+              <button id="btnRefreshJobs" class="btn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job No</th>
+                  <th>Branch</th>
+                  <th>Mode</th>
+                  <th>Type</th>
+                  <th>Customer</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTbody">
+                <tr><td colspan="6" class="muted">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- hidden selected job id (app.js uses this) -->
+          <input type="hidden" id="selectedJobId" value="" />
+        </div>
+      </div>
+
+      <!-- RIGHT: SHIPMENT + MILESTONES -->
+      <div class="card">
+        <div class="hd">
+          <h2>Shipment + Milestones</h2>
+          <div class="row">
+            <button id="btnRefreshJobDetails" class="btn">Refresh</button>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="muted" style="font-size:12px; margin-bottom:10px;">
+            This card stays as-is. Charges & Invoice UI is placed in a new third card below (Option C).
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody id="jobDetailsTbody">
+                <tr><td colspan="2" class="muted">Select a job to view details...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="sep"></div>
+
+          <div class="split" style="margin-bottom:10px;">
+            <strong>Milestones</strong>
+            <div class="row">
+              <button id="btnAddMilestone" class="btn">Add</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Milestone</th>
+                  <th>Date/Time</th>
+                  <th>Timezone</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="milestonesTbody">
+                <tr><td colspan="4" class="muted">Select a job to view milestones...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW THIRD CARD (Option C): Charges + Invoice -->
+    <div class="card" style="margin-top:14px;">
+      <div class="hd">
+        <h2>Charges + Profit + Invoice Draft</h2>
+        <div class="row">
+          <span class="chip"><span class="muted">Selected Job:</span> <strong id="selectedJobNo2">None</strong></span>
+          <button id="btnRefreshCharges" class="btn">Refresh Charges</button>
+          <button id="btnRefreshProfit" class="btn">Refresh Profit</button>
+        </div>
+      </div>
+
+      <div class="bd">
+        <div class="two-col">
+
+          <!-- LEFT: Add Charge + Charges list -->
+          <div>
+            <div class="split" style="margin-bottom:10px;">
+              <div>
+                <strong>Add Charge</strong>
+                <div class="muted" style="font-size:12px;">
+                  BUY & SELL supported • Currency will load from DB (Option 2)
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field sm">
+                <label>Type</label>
+                <select id="chargeType">
+                  <option value="SELL">SELL</option>
+                  <option value="BUY">BUY</option>
+                </select>
+              </div>
+
+              <div class="field sm">
+                <label>Charge Code</label>
+                <input id="chargeCode" placeholder="e.g. FRT / THC / DOC" />
+              </div>
+
+              <div class="field sm">
+                <label>Qty</label>
+                <input id="chargeQty" type="number" step="0.0001" placeholder="1" />
+              </div>
+
+              <div class="field sm">
+                <label>Unit Price</label>
+                <input id="chargeUnitPrice" type="number" step="0.0001" placeholder="100" />
+              </div>
+
+              <div class="field sm">
+                <label>Currency</label>
+                <select id="chargeCurrency">
+                  <option value="">Loading...</option>
+                </select>
+              </div>
+
+              <div class="field lg">
+                <label>Description</label>
+                <input id="chargeDesc" placeholder="Free text (optional)" />
+              </div>
+
+              <div class="field lg split">
+                <button id="btnAddCharge" class="btn good">Add Charge</button>
+                <span id="addChargeStatus" class="muted">—</span>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+
+            <div class="split" style="margin-bottom:10px;">
+              <div>
+                <strong>Charges (Latest)</strong>
+                <div class="muted" style="font-size:12px;">SELL/BUY lines with source currency & audit fields</div>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Cur</th>
+                    <th>Line Amt</th>
+                    <th>USD Amt</th>
+                    <th>FX</th>
+                    <th>Created At</th>
+                    <th>Created By</th>
+                  </tr>
+                </thead>
+                <tbody id="chargesTbody">
+                  <tr><td colspan="11" class="muted">Select a job to view charges...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- RIGHT: Profit summary + Invoice draft preview -->
+          <div>
+            <div class="split" style="margin-bottom:10px;">
+              <div>
+                <strong>Profit Summary (USD)</strong>
+                <div class="muted" style="font-size:12px;">
+                  Computed from charges using FX to USD
+                </div>
+              </div>
+            </div>
+
+            <div class="kpi">
+              <div class="box">
+                <div class="t">SELL (USD)</div>
+                <div id="kpiSellUsd" class="v">0.00</div>
+              </div>
+              <div class="box">
+                <div class="t">BUY (USD)</div>
+                <div id="kpiBuyUsd" class="v">0.00</div>
+              </div>
+              <div class="box good">
+                <div class="t">PROFIT (USD)</div>
+                <div id="kpiProfitUsd" class="v">0.00</div>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+
+            <div class="split" style="margin-bottom:10px;">
+              <div>
+                <strong>Invoice Draft</strong>
+                <div class="muted" style="font-size:12px;">
+                  Button enabled only for <b>FIN</b> (Option Y) — app.js will enforce.
+                </div>
+              </div>
+              <div class="row">
+                <button id="btnDraftInvoice" class="btn primary">Generate Invoice Draft</button>
+              </div>
+            </div>
+
+            <div class="muted" style="font-size:12px; margin-bottom:8px;">
+              Latest invoice lines (USD) + audit fields
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice No</th>
+                    <th>Line</th>
+                    <th>Charge Code</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit USD</th>
+                    <th>Line USD</th>
+                    <th>Created At</th>
+                    <th>Created By</th>
+                  </tr>
+                </thead>
+                <tbody id="invoiceLinesTbody">
+                  <tr><td colspan="9" class="muted">No invoice draft yet...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="invoiceStatus" class="hint">—</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div style="height:20px;"></div>
   </div>
 
-  <!-- Cache buster -->
-  <script src="./app.js?v=b5_charges_invoice_ui_20260513a"></script>
+  <!-- Your app logic -->
+  <script src="./app.js"></script>
 </body>
 </html>
