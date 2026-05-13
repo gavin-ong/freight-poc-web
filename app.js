@@ -1,308 +1,424 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CargoWise-ish MVP</title>
+/* =========================================================
+   CW-MVP app.js v2026-05-13e (MATCHED TO PROVIDED index.html)
+   - Supabase URL + key embedded
+   - Login/logout works with Menlo/SafeView (pointerdown capture)
+   - UI toggle loginCard/appCard
+   - Branches + public.users profile + Jobs + Charges wired
+   ========================================================= */
 
-  <!-- CW-MVP BUILD: 2026-05-13e -->
-  <style>
-    :root{
-      --bg1:#071224;
-      --bg2:#0a2a45;
-      --card:#0b1a33cc;
-      --border:#1e3a5f;
-      --text:#e9f1ff;
-      --muted:#9fb6d7;
-      --ok:#9fffb0;
-      --err:#ff7b7b;
-      --shadow:0 20px 60px rgba(0,0,0,.45);
-      --radius:16px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+(function () {
+  const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
+  const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  const APP_VERSION = "app.js v2026-05-13e";
+
+  let supabaseClient = null;
+  let currentUser = null;
+  let currentJobId = null;
+  let currentJobNo = null;
+
+  const byId = (id) => document.getElementById(id);
+
+  function setStatus(msg, isError = false, sticky = false) {
+    const el = byId("status");
+    if (el) {
+      el.textContent = msg;
+      el.style.color = isError ? "#ff7b7b" : "#9fffb0";
+      el.dataset.sticky = sticky ? "1" : "0";
+    } else {
+      (isError ? console.error : console.log)(msg);
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:var(--sans);
-      color:var(--text);
-      min-height:100vh;
-      background:
-        radial-gradient(900px 500px at 20% 30%, rgba(35,110,255,.35), transparent 60%),
-        radial-gradient(800px 500px at 75% 70%, rgba(0,255,225,.18), transparent 55%),
-        linear-gradient(180deg, var(--bg1), var(--bg2));
-      display:flex;
-      align-items:flex-start;
-      justify-content:center;
-      padding:54px 16px;
+  }
+
+  function isStickyStatus() {
+    const el = byId("status");
+    return !!(el && el.dataset.sticky === "1");
+  }
+
+  function setBadge(msg, ok = true) {
+    const el = byId("loggedInBadge");
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = ok ? "#9fffb0" : "#ff7b7b";
+  }
+
+  function toggleUI(isLoggedIn) {
+    const loginCard = byId("loginCard");
+    const appCard = byId("appCard");
+    const btnLogin = byId("btnLogin");
+    const btnLogout = byId("btnLogout");
+    const btnSignOut = byId("btnSignOut");
+
+    if (loginCard) loginCard.style.display = isLoggedIn ? "none" : "";
+    if (appCard) appCard.style.display = isLoggedIn ? "" : "none";
+    if (btnLogin) btnLogin.classList.toggle("hidden", isLoggedIn);
+    if (btnLogout) btnLogout.classList.toggle("hidden", !isLoggedIn);
+    if (btnSignOut) btnSignOut.classList.toggle("hidden", !isLoggedIn);
+  }
+
+  function setCurrentJob(job) {
+    currentJobId = job?.job_id ?? job?.id ?? null;
+    currentJobNo = job?.job_no ?? null;
+    const chip = byId("currentJobNo");
+    if (chip) chip.textContent = currentJobNo || "None";
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = true;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  function getEmailPassword() {
+    return {
+      email: (byId("email")?.value || "").trim(),
+      password: byId("password")?.value || ""
+    };
+  }
+
+  async function initSupabase() {
+    if (!window.supabase || !window.supabase.createClient) {
+      setStatus("Loading Supabase library...");
+      await loadScript(SUPABASE_CDN);
     }
-    .wrap{
-      width:min(1040px, 100%);
-      display:grid;
-      grid-template-columns: 1fr;
-      gap:18px;
-      justify-items:center;
+    if (!window.supabase || !window.supabase.createClient) {
+      setStatus("Supabase library failed to load.", true, true);
+      throw new Error("Supabase createClient missing");
     }
-    .card{
-      width:min(760px, 100%);
-      background:var(--card);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      overflow:hidden;
-      backdrop-filter: blur(10px);
+
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.supabaseClient = supabaseClient; // debug
+    console.log(APP_VERSION);
+    if (!isStickyStatus()) setStatus("Ready.");
+  }
+
+  // -------------------------------
+  // AUTH
+  // -------------------------------
+  async function signIn() {
+    const { email, password } = getEmailPassword();
+    if (!email || !password) {
+      setStatus("Email and password required.", true, true);
+      setBadge("❌ Missing email/password", false);
+      return;
     }
-    .cardHeader{
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:18px 18px 12px;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      background:linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+
+    setStatus("Signing in...");
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      setStatus("Login failed: " + error.message, true, true);
+      setBadge("❌ Login failed: " + error.message, false);
+      return;
     }
-    .logo{
-      width:28px;height:28px;border-radius:10px;
-      background:linear-gradient(135deg, rgba(63,187,255,1), rgba(0,255,196,1));
-      box-shadow:0 10px 20px rgba(0,255,196,.12);
-      flex:0 0 auto;
+
+    const s = await supabaseClient.auth.getSession();
+    const sessionUser = s?.data?.session?.user || data?.user || null;
+
+    if (!sessionUser) {
+      setStatus("Login did not create a session (key/auth settings issue).", true, true);
+      setBadge("❌ No session created after login", false);
+      return;
     }
-    .titleBox{line-height:1.1}
-    .title{font-weight:700;font-size:14px}
-    .sub{color:var(--muted);font-size:12px;margin-top:3px}
-    .cardBody{padding:18px}
-    h2{margin:0 0 14px;font-size:14px;letter-spacing:.2px}
-    label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
-    input, select{
-      width:100%;
-      height:38px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.10);
-      background:rgba(255,255,255,.07);
-      color:var(--text);
-      padding:0 12px;
-      outline:none;
+
+    currentUser = sessionUser;
+    setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
+    toggleUI(true);
+
+    await afterLogin();
+  }
+
+  async function signOut() {
+    setStatus("Signing out...");
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+      setStatus("Logout failed: " + error.message, true, true);
+      setBadge("❌ Logout failed: " + error.message, false);
+      return;
     }
-    input::placeholder{color:rgba(233,241,255,.45)}
-    .row{display:grid; gap:10px}
-    .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-    .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-    .btnBar{display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap}
-    button{
-      cursor:pointer;
-      height:36px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.10);
-      color:var(--text);
-      background:rgba(255,255,255,.08);
-      padding:0 14px;
-      font-weight:600;
+    currentUser = null;
+    setCurrentJob(null);
+    toggleUI(false);
+    setStatus("Signed out.", false, true);
+    setBadge("Signed out.", true);
+  }
+
+  async function restoreSession() {
+    setStatus("Checking session...");
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) {
+      setStatus("Session error: " + error.message, true, true);
+      setBadge("❌ Session error: " + error.message, false);
+      toggleUI(false);
+      return;
     }
-    .btn.primary{background:linear-gradient(180deg, rgba(31,99,255,1), rgba(15,61,179,1));}
-    .btn.good{background:linear-gradient(180deg, rgba(0,200,150,1), rgba(0,140,110,1));}
-    .btn.warn{background:linear-gradient(180deg, rgba(255,183,0,1), rgba(193,123,0,1));color:#081018;}
-    .muted{color:var(--muted); font-size:12px}
-    .status{margin-top:10px;font-size:12px;word-break:break-word}
-    .badge{margin-top:8px;font-size:12px;word-break:break-word;opacity:.95}
-    .section{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
-    .chip{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(15,36,70,.8);border:1px solid rgba(255,255,255,.08);color:var(--muted);font-size:12px}
-    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
-    th, td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;vertical-align:top}
-    th{color:var(--muted); font-weight:700}
-    tr:hover{background:rgba(255,255,255,.03)}
-    .small{font-size:11px}
-    .mono{font-family:var(--mono)}
-    .hidden{display:none}
-  </style>
-</head>
 
-<body>
-  <div class="wrap">
+    if (data?.session?.user) {
+      currentUser = data.session.user;
+      setBadge("✅ Logged in as: " + (currentUser.email || "(unknown)"), true);
+      toggleUI(true);
+      await afterLogin();
+      return;
+    }
 
-    <!-- LOGIN CARD -->
-    <div class="card" id="loginCard">
-      <div class="cardHeader">
-        <div class="logo"></div>
-        <div class="titleBox">
-          <div class="title">CargoWise-ish MVP</div>
-          <div class="sub">Login to manage jobs, charges & invoices</div>
-        </div>
-      </div>
+    currentUser = null;
+    toggleUI(false);
+    if (!isStickyStatus()) setStatus("Ready.");
+  }
 
-      <div class="cardBody">
-        <h2>Sign in</h2>
+  // -------------------------------
+  // DATA LOADERS
+  // -------------------------------
+  async function loadBranches() {
+    const ddl = byId("branch");
+    if (!ddl) return { ok: true };
 
-        <label for="email">Email</label>
-        <input id="email" type="email" placeholder="name@company.com" autocomplete="username" />
+    const { data, error } = await supabaseClient
+      .from("branches")
+      .select("country_code, branch_code")
+      .order("country_code", { ascending: true })
+      .order("branch_code", { ascending: true });
 
-        <label for="password">Password</label>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    if (error) return { ok: false, msg: "branches: " + error.message };
 
-        <div class="btnBar">
-          <button id="btnLogin" class="btn primary">Login</button>
-          <button id="btnLogout" class="btn hidden">Logout</button>
-          <button id="btnSignOut" class="btn hidden">Sign out</button>
-        </div>
+    ddl.innerHTML = "";
+    (data || []).forEach((b) => {
+      const opt = document.createElement("option");
+      opt.value = b.branch_code;
+      opt.textContent = `${b.country_code} - ${b.branch_code}`;
+      ddl.appendChild(opt);
+    });
 
-        <div id="status" class="status muted">Ready.</div>
-        <div id="loggedInBadge" class="badge"></div>
+    return { ok: true };
+  }
 
-        <div class="muted small" style="margin-top:10px;">
-          Tip: If login fails after role/branch changes, refresh once to reload session state.
-        </div>
-      </div>
-    </div>
+  async function loadUserProfileDefaultBranch() {
+    if (!currentUser) return { ok: false, msg: "No user" };
 
-    <!-- APP CARD -->
-    <div class="card hidden" id="appCard">
-      <div class="cardHeader">
-        <div class="logo"></div>
-        <div class="titleBox">
-          <div class="title">Operations</div>
-          <div class="sub">Jobs • Charges • Draft Invoice</div>
-        </div>
-      </div>
+    const { data, error } = await supabaseClient
+      .from("users") // public.users
+      .select("branch_code, role")
+      .eq("id", currentUser.id)
+      .single();
 
-      <div class="cardBody">
+    if (error) return { ok: false, msg: "users: " + error.message };
 
-        <div class="row2">
-          <div>
-            <label>Branch</label>
-            <select id="branch"></select>
-          </div>
-          <div style="display:flex;align-items:flex-end;gap:10px;">
-            <span class="chip">Current Job: <span id="currentJobNo" class="mono">None</span></span>
-          </div>
-        </div>
+    const ddl = byId("branch");
+    if (ddl && data?.branch_code) ddl.value = data.branch_code;
 
-        <!-- JOBS -->
-        <div class="section">
-          <h2>Jobs</h2>
+    return { ok: true };
+  }
 
-          <div class="row3">
-            <div>
-              <label>Country Code</label>
-              <input id="country" placeholder="SG" />
-            </div>
-            <div>
-              <label>Transport Mode</label>
-              <select id="transport_mode">
-                <option value="S">S (Sea)</option>
-                <option value="A">A (Air)</option>
-                <option value="L">L (Land)</option>
-                <option value="I">I (Integrated)</option>
-              </select>
-            </div>
-            <div>
-              <label>Job Type</label>
-              <select id="job_type">
-                <option value="O">O (Export)</option>
-                <option value="I">I (Import)</option>
-              </select>
-            </div>
-          </div>
+  async function loadJobs() {
+    const tbody = byId("jobsTableBody");
+    if (!tbody) return { ok: false, msg: "UI missing jobsTableBody (index.html not updated)" };
 
-          <div class="row">
-            <div>
-              <label>Customer Name</label>
-              <input id="customer" placeholder="Customer / Shipper" />
-            </div>
-          </div>
+    const { data, error } = await supabaseClient
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-          <div class="btnBar">
-            <button id="btnCreateJob" class="btn good">Create Job</button>
-            <button id="btnRefreshJobs" class="btn">Refresh</button>
-            <button id="btnRefreshJobDetails" class="btn">Refresh Details</button>
-          </div>
+    if (error) return { ok: false, msg: "jobs: " + error.message };
 
-          <table>
-            <thead>
-              <tr>
-                <th>Job No</th>
-                <th>Country</th>
-                <th>Branch</th>
-                <th>Mode</th>
-                <th>Type</th>
-                <th>Customer</th>
-              </tr>
-            </thead>
-            <tbody id="jobsTableBody"></tbody>
-          </table>
+    tbody.innerHTML = "";
+    (data || []).forEach((job) => {
+      const tr = document.createElement("tr");
+      tr.dataset.jobId = job.job_id ?? job.id ?? "";
+      tr.dataset.jobNo = job.job_no ?? "";
+      tr.innerHTML = `
+        <td>${job.job_no ?? ""}</td>
+        <td>${job.country_code ?? ""}</td>
+        <td>${job.branch_code ?? ""}</td>
+        <td>${job.transport_mode ?? ""}</td>
+        <td>${job.job_type ?? ""}</td>
+        <td>${job.customer_name ?? ""}</td>
+      `;
 
-          <div class="muted small" style="margin-top:8px;">
-            Tip: Click a job row to select it (loads charges).
-          </div>
-        </div>
+      tr.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        setCurrentJob(job);
+        loadChargesForCurrentJob();
+      }, true);
 
-        <!-- CHARGES -->
-        <div class="section">
-          <h2>Charges</h2>
+      tbody.appendChild(tr);
+    });
 
-          <div class="row3">
-            <div>
-              <label>Charge Code</label>
-              <input id="charge_code" placeholder="FRT / DOC / THC" />
-            </div>
-            <div>
-              <label>Amount</label>
-              <input id="amount" placeholder="100.00" />
-            </div>
-            <div>
-              <label>Currency</label>
-              <input id="currency" placeholder="USD" />
-            </div>
-          </div>
+    return { ok: true };
+  }
 
-          <div class="row2">
-            <div>
-              <label>Type</label>
-              <select id="charge_type">
-                <option value="SELL">SELL</option>
-                <option value="BUY">BUY</option>
-              </select>
-            </div>
-            <div style="display:flex;align-items:flex-end;gap:10px;">
-              <button id="btnAddCharge" class="btn good" style="width:100%;">Add Charge</button>
-            </div>
-          </div>
+  async function createJob() {
+    const country = (byId("country")?.value || "").trim();
+    const branch = (byId("branch")?.value || "").trim();
+    const transport = (byId("transport_mode")?.value || "").trim();
+    const jobType = (byId("job_type")?.value || "").trim();
+    const customer = (byId("customer")?.value || "").trim();
 
-          <div class="btnBar">
-            <button id="btnRefreshCharges" class="btn">Refresh Charges</button>
-            <button id="btnRefreshProfit" class="btn">Refresh Profit</button>
-            <button id="btnDraftInvoice" class="btn warn">Generate Invoice Draft</button>
-          </div>
+    setStatus("Creating job...");
 
-          <table>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Amount</th>
-                <th>Currency</th>
-                <th>Type</th>
-              </tr>
-            </thead>
-            <tbody id="chargesTableBody"></tbody>
-          </table>
+    const { data, error } = await supabaseClient.rpc("create_job", {
+      p_country_code: country,
+      p_branch_code: branch,
+      p_transport_mode: transport,
+      p_job_type: jobType,
+      p_customer_name: customer
+    });
 
-          <div class="muted small" style="margin-top:8px;">
-            Tip: Select a job first. Charges are tied to the selected job.
-          </div>
-        </div>
+    if (error) {
+      setStatus("Create job failed: " + error.message, true, true);
+      return;
+    }
 
-        <!-- MILESTONES placeholder -->
-        <div class="section">
-          <h2>Milestones</h2>
-          <div class="btnBar">
-            <button id="btnAddMilestone" class="btn">Add</button>
-          </div>
-          <div class="muted small">Placeholder (we wire this next).</div>
-        </div>
+    setStatus("Job created: " + (data?.job_no || "OK"));
+    await loadJobs();
+  }
 
-      </div>
-    </div>
+  async function loadChargesForCurrentJob() {
+    const tbody = byId("chargesTableBody");
+    if (!tbody) return;
 
-  </div>
+    if (!currentJobId) {
+      tbody.innerHTML = "";
+      setStatus("Select a job first to load charges.", true, true);
+      return;
+    }
 
-  <!-- IMPORTANT: Correct script tag -->
-  <script src="./app.js?v=20260513e"></script>
-</body>
-</html>
+    setStatus("Loading charges...");
+
+    const { data, error } = await supabaseClient
+      .from("charges")
+      .select("*")
+      .eq("job_id", currentJobId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setStatus("Charges load failed: " + error.message, true, true);
+      return;
+    }
+
+    tbody.innerHTML = "";
+    (data || []).forEach((c) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${c.charge_code ?? ""}</td>
+        <td>${c.amount ?? ""}</td>
+        <td>${c.currency ?? ""}</td>
+        <td>${c.type ?? ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    setStatus("Charges loaded.");
+  }
+
+  async function addCharge() {
+    if (!currentJobId) {
+      setStatus("Select a job first before adding charge.", true, true);
+      return;
+    }
+
+    const chargeCode = (byId("charge_code")?.value || "").trim();
+    const amountRaw = (byId("amount")?.value || "").trim();
+    const currency = (byId("currency")?.value || "").trim();
+    const type = (byId("charge_type")?.value || "").trim();
+
+    const amount = parseFloat(amountRaw);
+    if (!chargeCode || !currency || !type || !Number.isFinite(amount)) {
+      setStatus("Charge fields invalid (code/amount/currency/type).", true, true);
+      return;
+    }
+
+    setStatus("Adding charge...");
+
+    const { error } = await supabaseClient.from("charges").insert([{
+      job_id: currentJobId,
+      charge_code: chargeCode,
+      amount,
+      currency,
+      type
+    }]);
+
+    if (error) {
+      setStatus("Add charge failed: " + error.message, true, true);
+      return;
+    }
+
+    setStatus("Charge added.");
+    await loadChargesForCurrentJob();
+  }
+
+  async function afterLogin() {
+    setStatus("Loading data...");
+
+    const r1 = await loadBranches();
+    if (!r1.ok) { setStatus("✅ Logged in, but " + r1.msg, true, true); return; }
+
+    const r2 = await loadUserProfileDefaultBranch();
+    if (!r2.ok) { setStatus("✅ Logged in, but " + r2.msg, true, true); return; }
+
+    const r3 = await loadJobs();
+    if (!r3.ok) { setStatus("✅ Logged in, but " + r3.msg, true, true); return; }
+
+    setStatus("✅ Logged in and data loaded.");
+  }
+
+  // -------------------------------
+  // EVENT WIRING (Menlo/SafeView proof)
+  // -------------------------------
+  function wireEvents() {
+    document.addEventListener("pointerdown", (e) => {
+      const btn = e.target?.closest ? e.target.closest("button") : null;
+      if (!btn) return;
+
+      const id = btn.id || "";
+      if (id === "btnLogin") { e.preventDefault(); signIn(); }
+      if (id === "btnLogout" || id === "btnSignOut") { e.preventDefault(); signOut(); }
+
+      if (id === "btnCreateJob") { e.preventDefault(); createJob(); }
+      if (id === "btnRefreshJobs") { e.preventDefault(); loadJobs(); }
+      if (id === "btnRefreshCharges") { e.preventDefault(); loadChargesForCurrentJob(); }
+      if (id === "btnAddCharge") { e.preventDefault(); addCharge(); }
+
+      // placeholders
+      if (id === "btnDraftInvoice") { e.preventDefault(); setStatus("Invoice draft: next module (not wired yet).", true, true); }
+      if (id === "btnRefreshProfit") { e.preventDefault(); setStatus("Profit: next module (not wired yet).", true, true); }
+      if (id === "btnAddMilestone") { e.preventDefault(); setStatus("Milestones: next module (not wired yet).", true, true); }
+    }, true);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !currentUser) {
+        e.preventDefault();
+        signIn();
+      }
+    });
+
+    // Debug helpers
+    window.__cw_login = signIn;
+    window.__cw_logout = signOut;
+    window.__cw_session = async () => {
+      const r = await supabaseClient.auth.getSession();
+      console.log("SESSION:", r.data.session);
+      console.log("EMAIL:", r.data.session?.user?.email);
+      return r;
+    };
+  }
+
+  async function init() {
+    await initSupabase();
+    wireEvents();
+    await restoreSession();
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    init().catch((e) => {
+      console.error(e);
+      setStatus("Init failed: " + (e.message || e), true, true);
+      setBadge("❌ Init failed: " + (e.message || e), false);
+      toggleUI(false);
+    });
+  });
+})();
