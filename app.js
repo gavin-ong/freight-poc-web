@@ -1,10 +1,11 @@
 (function () {
-  // ================= // SUPABASE CONFIG (YOUR VALUES)  // ===============================
+  // ===============================
+  // SUPABASE CONFIG (YOUR VALUES)
   // ===============================
   const SUPABASE_URL = "https://quzputmmabgcfmegarvd.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UG9E0FbUzetadkz8TQN2fg_pIWx3LTO";
   const SUPABASE_CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-  const BUILD = "BUILD: FREIGHT-MVP-2 (JS)";
+  const BUILD = "BUILD: FREIGHT-MVP-3 (JS)";
 
   let client = null;
   let user = null;
@@ -13,62 +14,72 @@
   const $ = (id) => document.getElementById(id);
 
   // ===============================
-  // UI HELPERS (VISIBLE IN OPS)
+  // UI: ALWAYS-VISIBLE OPS STATUS + DIAG
   // ===============================
-  function ensureOpsStatus() {
-    // ensure there's a status box inside appCard, so you can SEE errors after login
+  function ensureOpsPanels() {
     const appCard = $("appCard");
     if (!appCard) return;
 
+    const body = appCard.querySelector(".body") || appCard;
+
     if (!$("opsStatus")) {
-      const div = document.createElement("div");
-      div.id = "opsStatus";
-      div.style.marginTop = "10px";
-      div.style.fontSize = "12px";
-      div.style.opacity = "0.95";
-      div.style.wordBreak = "break-word";
-      div.style.color = "#9fffb0";
+      const s = document.createElement("div");
+      s.id = "opsStatus";
+      s.style.margin = "10px 0";
+      s.style.padding = "10px 12px";
+      s.style.borderRadius = "12px";
+      s.style.border = "1px solid rgba(255,255,255,.12)";
+      s.style.background = "rgba(255,255,255,.06)";
+      s.style.fontSize = "12px";
+      s.style.wordBreak = "break-word";
+      s.style.color = "#9fffb0";
+      body.insertBefore(s, body.firstChild);
+      s.textContent = "Ready.";
+    }
 
-      // insert near top of appCard body
-      const body = appCard.querySelector(".body") || appCard;
-      body.insertBefore(div, body.firstChild);
-      div.textContent = "Ready.";
+    if (!$("opsDiag")) {
+      const d = document.createElement("div");
+      d.id = "opsDiag";
+      d.style.margin = "8px 0 14px";
+      d.style.padding = "10px 12px";
+      d.style.borderRadius = "12px";
+      d.style.border = "1px dashed rgba(255,255,255,.18)";
+      d.style.background = "rgba(15,36,70,.35)";
+      d.style.fontSize = "11px";
+      d.style.fontFamily = "ui-monospace, Menlo, Consolas, monospace";
+      d.style.whiteSpace = "pre-wrap";
+      d.style.wordBreak = "break-word";
+      d.style.color = "#9fb6d7";
+      body.insertBefore(d, body.children[1] || null);
+      d.textContent = `${BUILD}\nDIAG: starting...`;
     }
   }
 
-  function status(msg, isErr = false) {
-    // show in login card if present
-    const loginStatus = $("status");
-    if (loginStatus) {
-      loginStatus.textContent = msg;
-      loginStatus.style.color = isErr ? "#ff7b7b" : "#9fffb0";
+  function setOpsStatus(msg, isErr = false) {
+    ensureOpsPanels();
+    const el = $("opsStatus");
+    if (el) {
+      el.textContent = msg;
+      el.style.color = isErr ? "#ff7b7b" : "#9fffb0";
     }
-
-    // show in ops too
-    ensureOpsStatus();
-    const ops = $("opsStatus");
-    if (ops) {
-      ops.textContent = msg;
-      ops.style.color = isErr ? "#ff7b7b" : "#9fffb0";
-    }
-
-    // also console for you (but you said no console reliance)
-    console.log(msg);
   }
 
-  function hardError(msg, errObj) {
-    status(msg, true);
-    alert(msg);
+  function setDiag(lines) {
+    ensureOpsPanels();
+    const el = $("opsDiag");
+    if (!el) return;
+    el.textContent = lines.join("\n");
+  }
+
+  function hardError(userMsg, errObj) {
+    setOpsStatus("❌ " + userMsg, true);
+    alert("❌ " + userMsg);
     if (errObj) console.error(errObj);
   }
 
-  function badge(msg, ok = true) {
-    const el = $("badge");
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = ok ? "#9fffb0" : "#ff7b7b";
-  }
-
+  // ===============================
+  // UI VISIBILITY
+  // ===============================
   function showApp(loggedIn) {
     $("loginCard")?.classList.toggle("hidden", loggedIn);
     $("appCard")?.classList.toggle("hidden", !loggedIn);
@@ -81,8 +92,16 @@
     if (el) el.textContent = jobNo || "None";
   }
 
+  // Safe field getter to survive schema drift
+  function pick(obj, keys) {
+    for (const k of keys) {
+      if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+    }
+    return "";
+  }
+
   // ===============================
-  // LOAD SUPABASE LIB
+  // LOAD SUPABASE
   // ===============================
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -98,7 +117,7 @@
   async function initSupabase() {
     try {
       console.log(BUILD);
-      status("Loading Supabase JS...");
+      setOpsStatus("Loading Supabase JS...");
       if (!window.supabase || !window.supabase.createClient) {
         await loadScript(SUPABASE_CDN);
       }
@@ -107,7 +126,7 @@
         return;
       }
       client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      status("Ready.");
+      setOpsStatus("Ready.");
     } catch (e) {
       hardError("Init crashed: " + (e.message || e), e);
     }
@@ -128,7 +147,7 @@
     const { email, password } = creds();
     if (!email || !password) return hardError("Email/password required.");
 
-    status("Signing in...");
+    setOpsStatus("Signing in...");
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) return hardError("Login failed: " + error.message, error);
 
@@ -136,42 +155,39 @@
     user = s?.data?.session?.user || data?.user || null;
     if (!user) return hardError("Signed in but no session created.");
 
-    badge("✅ Logged in as: " + (user.email || "(unknown)"), true);
     showApp(true);
     await afterLogin();
   }
 
   async function signOut() {
-    status("Signing out...");
+    setOpsStatus("Signing out...");
     const { error } = await client.auth.signOut();
     if (error) return hardError("Logout failed: " + error.message, error);
 
     user = null;
     currentJobId = null;
     setCurrentJob(null);
-    badge("Signed out.", true);
     showApp(false);
-    status("Ready.");
+    setOpsStatus("Ready.");
   }
 
   async function restoreSession() {
-    status("Checking session...");
+    setOpsStatus("Checking session...");
     const { data, error } = await client.auth.getSession();
     if (error) return hardError("Session error: " + error.message, error);
 
     if (data?.session?.user) {
       user = data.session.user;
-      badge("✅ Logged in as: " + (user.email || "(unknown)"), true);
       showApp(true);
       await afterLogin();
     } else {
       showApp(false);
-      status("Ready.");
+      setOpsStatus("Ready.");
     }
   }
 
   // ===============================
-  // LOAD BRANCHES
+  // DATA LOADERS
   // ===============================
   async function loadBranches() {
     const ddl = $("branch");
@@ -188,7 +204,7 @@
     ddl.innerHTML = "";
     (data || []).forEach(b => {
       const opt = document.createElement("option");
-      opt.value = b.branch_code; // we will pass this as p_branch_key for now
+      opt.value = b.branch_code; // maps to p_branch_key for now
       opt.textContent = `${b.country_code} - ${b.branch_code}`;
       ddl.appendChild(opt);
     });
@@ -207,13 +223,11 @@
     if (ddl && data?.branch_code) ddl.value = data.branch_code;
   }
 
-  // ===============================
-  // JOBS
-  // ===============================
   async function loadJobs() {
     const tbody = $("jobsTableBody");
-    if (!tbody) return hardError("UI missing jobs table body.");
+    if (!tbody) return hardError("UI missing jobsTableBody.");
 
+    setOpsStatus("Loading jobs...");
     const { data, error } = await client
       .from("jobs")
       .select("*")
@@ -222,18 +236,33 @@
     if (error) return hardError("jobs blocked: " + error.message, error);
 
     tbody.innerHTML = "";
-    (data || []).forEach(job => {
+
+    const rows = data || [];
+    setDiag([
+      BUILD,
+      `USER: ${user?.email || "unknown"}`,
+      `JOBS FETCHED: ${rows.length}`,
+      rows.length ? `JOB KEYS SAMPLE: ${Object.keys(rows[0]).slice(0, 20).join(", ")}` : "JOB KEYS SAMPLE: (none)"
+    ]);
+
+    rows.forEach(job => {
       const tr = document.createElement("tr");
-      const jid = job.job_id ?? job.id ?? null;
-      const jno = job.job_no ?? "";
+
+      const jid = pick(job, ["job_id", "id"]);
+      const jno = pick(job, ["job_no", "job_number", "jobNo"]);
+      const country = pick(job, ["country_code", "origin_country", "originCountry"]);
+      const branch = pick(job, ["branch_code", "branch_key", "branch"]);
+      const mode = pick(job, ["transport_mode", "mode"]);
+      const type = pick(job, ["job_type", "type"]);
+      const cust = pick(job, ["customer_name", "customer"]);
 
       tr.innerHTML = `
-        <td>${job.job_no ?? ""}</td>
-        <td>${job.country_code ?? job.origin_country ?? ""}</td>
-        <td>${job.branch_code ?? job.branch_key ?? ""}</td>
-        <td>${job.transport_mode ?? ""}</td>
-        <td>${job.job_type ?? ""}</td>
-        <td>${job.customer_name ?? ""}</td>
+        <td>${jno}</td>
+        <td>${country}</td>
+        <td>${branch}</td>
+        <td>${mode}</td>
+        <td>${type}</td>
+        <td>${cust}</td>
       `;
 
       tr.addEventListener("pointerdown", (e) => {
@@ -245,28 +274,30 @@
 
       tbody.appendChild(tr);
     });
+
+    setOpsStatus(`Jobs loaded (${rows.length}).`);
   }
 
-  // ✅ FIXED: call create_job with your REAL signature/args
+  // ===============================
+  // ACTIONS: CREATE JOB (RPC signature YOU have)
+  // create_job(p_branch_key, p_transport_mode, p_job_type, p_customer_name, p_origin_country, p_destination_country, p_incoterm)
+  // ===============================
   async function createJob() {
     if (!user) return hardError("Not logged in.");
 
-    const branchKey = ($("branch")?.value || "").trim();           // maps to p_branch_key
-    const transportMode = ($("transport_mode")?.value || "").trim(); // maps to p_transport_mode
-    const jobType = ($("job_type")?.value || "").trim();             // maps to p_job_type
-    const customerName = ($("customer")?.value || "").trim();        // maps to p_customer_name
-    const originCountry = ($("country")?.value || "").trim() || "SG"; // maps to p_origin_country
+    const branchKey = ($("branch")?.value || "").trim();
+    const transportMode = ($("transport_mode")?.value || "").trim();
+    const jobType = ($("job_type")?.value || "").trim();
+    const customerName = ($("customer")?.value || "").trim();
+    const originCountry = (($("country")?.value || "").trim() || "SG");
 
-    // For MVP, we’ll set destination_country + incoterm default values.
-    // Later we add UI fields for them.
-    const destinationCountry = "SG";    // default placeholder
-    const incoterm = "FOB";             // default placeholder
+    // MVP defaults until we add fields
+    const destinationCountry = "SG";
+    const incoterm = "FOB";
 
     if (!branchKey) return hardError("Branch must be selected.");
-    if (!transportMode) return hardError("Transport Mode required.");
-    if (!jobType) return hardError("Job Type required.");
 
-    status("Creating job...");
+    setOpsStatus("Creating job...");
 
     const { data, error } = await client.rpc("create_job", {
       p_branch_key: branchKey,
@@ -280,12 +311,13 @@
 
     if (error) return hardError("Create job failed: " + error.message, error);
 
-    status("✅ Job created. Refreshing list...");
+    // Some RPC returns job_no, some returns void; either way refresh
+    setOpsStatus("✅ Job created. Refreshing jobs...");
     await loadJobs();
   }
 
   // ===============================
-  // CHARGES (public.charges)
+  // CHARGES (requires public.charges to exist)
   // ===============================
   async function loadCharges() {
     const tbody = $("chargesTableBody");
@@ -293,10 +325,10 @@
 
     if (!currentJobId) {
       tbody.innerHTML = "";
-      return status("Select a job first to load charges.", true);
+      return hardError("Select a job row first (so Current Job is not None).");
     }
 
-    status("Loading charges...");
+    setOpsStatus("Loading charges...");
     const { data, error } = await client
       .from("charges")
       .select("*")
@@ -309,19 +341,19 @@
     (data || []).forEach(c => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${c.charge_code ?? ""}</td>
-        <td>${c.amount ?? ""}</td>
-        <td>${c.currency ?? ""}</td>
-        <td>${c.type ?? ""}</td>
+        <td>${pick(c, ["charge_code", "code"])}</td>
+        <td>${pick(c, ["amount"])}</td>
+        <td>${pick(c, ["currency"])}</td>
+        <td>${pick(c, ["type"])}</td>
       `;
       tbody.appendChild(tr);
     });
 
-    status("Charges loaded.");
+    setOpsStatus(`Charges loaded (${(data || []).length}).`);
   }
 
   async function addCharge() {
-    if (!currentJobId) return hardError("Select a job first.");
+    if (!currentJobId) return hardError("Select a job row first (Current Job must not be None).");
 
     const charge_code = ($("charge_code")?.value || "").trim();
     const amount = parseFloat(($("amount")?.value || "").trim());
@@ -332,7 +364,7 @@
       return hardError("Invalid charge fields (code/amount/currency/type).");
     }
 
-    status("Adding charge...");
+    setOpsStatus("Adding charge...");
     const { error } = await client.from("charges").insert([{
       job_id: currentJobId,
       charge_code,
@@ -343,7 +375,7 @@
 
     if (error) return hardError("Add charge failed: " + error.message, error);
 
-    status("✅ Charge added.");
+    setOpsStatus("✅ Charge added. Refreshing charges...");
     await loadCharges();
   }
 
@@ -351,46 +383,60 @@
   // AFTER LOGIN
   // ===============================
   async function afterLogin() {
-    ensureOpsStatus();
-    status("Loading data...");
+    ensureOpsPanels();
+    setOpsStatus("Loading data...");
     await loadBranches();
     await loadDefaultBranchFromProfile();
     await loadJobs();
-    status("✅ Logged in and data loaded.");
+    setOpsStatus("✅ Logged in and data loaded.");
   }
 
   // ===============================
-  // WIRE BUTTONS (pointerdown capture)
+  // BUTTON WIRING (NO MORE “DOES NOTHING”)
   // ===============================
+  function bindButton(id, handler) {
+    const el = $(id);
+    if (!el) return false;
+
+    // remove old handlers by cloning
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+
+    // bind three ways
+    clone.addEventListener("pointerdown", (e) => { e.preventDefault(); handler(); }, true);
+    clone.addEventListener("click", (e) => { e.preventDefault(); handler(); }, true);
+
+    return true;
+  }
+
   function wire() {
+    // direct binds (most reliable)
+    bindButton("btnLogin", signIn);
+    bindButton("btnLogout", signOut);
+    bindButton("btnCreateJob", createJob);
+    bindButton("btnRefreshJobs", loadJobs);
+    bindButton("btnAddCharge", addCharge);
+    bindButton("btnRefreshCharges", loadCharges);
+
+    // capture delegation fallback (for Menlo/SafeView oddities)
     document.addEventListener("pointerdown", (e) => {
       const btn = e.target?.closest ? e.target.closest("button") : null;
       if (!btn) return;
-
-      switch (btn.id) {
-        case "btnLogin": e.preventDefault(); signIn(); break;
-        case "btnLogout": e.preventDefault(); signOut(); break;
-
-        case "btnCreateJob": e.preventDefault(); createJob(); break;
-        case "btnRefreshJobs": e.preventDefault(); loadJobs(); break;
-
-        case "btnAddCharge": e.preventDefault(); addCharge(); break;
-        case "btnRefreshCharges": e.preventDefault(); loadCharges(); break;
-      }
+      const id = btn.id || "";
+      if (id === "btnCreateJob") { e.preventDefault(); createJob(); }
+      if (id === "btnAddCharge") { e.preventDefault(); addCharge(); }
     }, true);
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !user) {
-        e.preventDefault();
-        signIn();
-      }
-    });
   }
 
+  // ===============================
+  // INIT
+  // ===============================
   document.addEventListener("DOMContentLoaded", async () => {
+    ensureOpsPanels();
     await initSupabase();
     if (!client) return;
     wire();
     await restoreSession();
   });
 })();
+``
