@@ -25,15 +25,10 @@
   }
 
   function showApp(loggedIn) {
-    const loginCard = $("loginCard");
-    const appCard = $("appCard");
-    const btnLogin = $("btnLogin");
-    const btnLogout = $("btnLogout");
-
-    if (loginCard) loginCard.style.display = loggedIn ? "none" : "";
-    if (appCard) appCard.style.display = loggedIn ? "" : "none";
-    if (btnLogin) btnLogin.classList.toggle("hidden", loggedIn);
-    if (btnLogout) btnLogout.classList.toggle("hidden", !loggedIn);
+    $("loginCard") && ($("loginCard").style.display = loggedIn ? "none" : "");
+    $("appCard") && ($("appCard").style.display = loggedIn ? "" : "none");
+    $("btnLogin") && $("btnLogin").classList.toggle("hidden", loggedIn);
+    $("btnLogout") && $("btnLogout").classList.toggle("hidden", !loggedIn);
   }
 
   function setCurrentJob(jobNo) {
@@ -68,10 +63,7 @@
   }
 
   function creds() {
-    return {
-      email: ($("email")?.value || "").trim(),
-      password: $("password")?.value || ""
-    };
+    return { email: ($("email")?.value || "").trim(), password: $("password")?.value || "" };
   }
 
   async function signIn() {
@@ -86,7 +78,7 @@
     user = s?.data?.session?.user || data?.user || null;
     if (!user) return status("Signed in but no session.", true);
 
-    badge("✅ Logged in as: " + (user.email || "(unknown)"));
+    badge("✅ Logged in as: " + (user.email || "(unknown)"), true);
     showApp(true);
     await afterLogin();
   }
@@ -108,7 +100,7 @@
     const { data } = await client.auth.getSession();
     if (data?.session?.user) {
       user = data.session.user;
-      badge("✅ Logged in as: " + (user.email || "(unknown)"));
+      badge("✅ Logged in as: " + (user.email || "(unknown)"), true);
       showApp(true);
       await afterLogin();
     } else {
@@ -119,7 +111,7 @@
 
   async function loadBranches() {
     const ddl = $("branch");
-    if (!ddl) return status("UI missing #branch (wrong index.html).", true);
+    if (!ddl) return status("UI missing #branch (still on old HTML).", true);
 
     const { data, error } = await client
       .from("branches")
@@ -153,13 +145,9 @@
 
   async function loadJobs() {
     const tbody = $("jobsTableBody");
-    if (!tbody) return status("UI missing #jobsTableBody (wrong index.html).", true);
+    if (!tbody) return status("UI missing #jobsTableBody (still on old HTML).", true);
 
-    const { data, error } = await client
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await client.from("jobs").select("*").order("created_at", { ascending: false });
     if (error) return status("jobs blocked: " + error.message, true);
 
     tbody.innerHTML = "";
@@ -167,7 +155,6 @@
       const tr = document.createElement("tr");
       const jid = job.job_id ?? job.id ?? null;
       const jno = job.job_no ?? "";
-
       tr.innerHTML = `
         <td>${job.job_no ?? ""}</td>
         <td>${job.country_code ?? ""}</td>
@@ -176,14 +163,12 @@
         <td>${job.job_type ?? ""}</td>
         <td>${job.customer_name ?? ""}</td>
       `;
-
       tr.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         currentJobId = jid;
         setCurrentJob(jno);
         loadCharges();
       }, true);
-
       tbody.appendChild(tr);
     });
   }
@@ -226,12 +211,7 @@
     tbody.innerHTML = "";
     (data || []).forEach(c => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${c.charge_code ?? ""}</td>
-        <td>${c.amount ?? ""}</td>
-        <td>${c.currency ?? ""}</td>
-        <td>${c.type ?? ""}</td>
-      `;
+      tr.innerHTML = `<td>${c.charge_code ?? ""}</td><td>${c.amount ?? ""}</td><td>${c.currency ?? ""}</td><td>${c.type ?? ""}</td>`;
       tbody.appendChild(tr);
     });
 
@@ -246,15 +226,10 @@
     const currency = ($("currency")?.value || "").trim();
     const type = ($("charge_type")?.value || "").trim();
 
-    if (!charge_code || !currency || !type || !Number.isFinite(amount)) {
-      return status("Invalid charge fields.", true);
-    }
+    if (!charge_code || !currency || !type || !Number.isFinite(amount)) return status("Invalid charge fields.", true);
 
     status("Adding charge...");
-    const { error } = await client.from("charges").insert([{
-      job_id: currentJobId, charge_code, amount, currency, type
-    }]);
-
+    const { error } = await client.from("charges").insert([{ job_id: currentJobId, charge_code, amount, currency, type }]);
     if (error) return status("Add charge failed: " + error.message, true);
 
     status("Charge added.");
@@ -270,7 +245,7 @@
   }
 
   function wire() {
-    // Menlo/SafeView proof: pointerdown capture
+    // Menlo/SafeView-safe: pointerdown capture
     document.addEventListener("pointerdown", (e) => {
       const btn = e.target?.closest ? e.target.closest("button") : null;
       if (!btn) return;
@@ -289,9 +264,7 @@
       if (e.key === "Enter" && !user) { e.preventDefault(); signIn(); }
     });
 
-    // Debug helpers
     window.__cw_ping = () => console.log(BUILD);
-    window.__cw_session = async () => client.auth.getSession().then(r => (console.log(r.data.session), r));
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
