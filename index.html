@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>CargoWise-ish MVP</title>
+  <title>HEARTBEAT LIVE ✅</title>
   <style>
     body{
       margin:0; min-height:100vh;
@@ -35,17 +35,17 @@
       width:28px; height:28px; border-radius:10px;
       background:linear-gradient(135deg, #3fbbff, #00ffc4);
     }
-    .title{font-weight:800; font-size:14px;}
-    .sub{opacity:.75; font-size:12px; margin-top:2px;}
+    .title{font-weight:900; font-size:18px;}
+    .sub{opacity:.75; font-size:12px; margin-top:3px;}
     .body{padding:18px;}
-    .build{margin-top:10px; font-size:11px; opacity:.8; font-family: ui-monospace, Menlo, Consolas, monospace;}
+    .build{margin-top:10px; font-size:12px; opacity:.9; font-family: ui-monospace, Menlo, Consolas, monospace;}
     .statusLine{
-      margin-top:10px;
-      padding:10px 12px;
+      margin-top:12px;
+      padding:12px 14px;
       border-radius:12px;
       border:1px solid rgba(255,255,255,.10);
       background:rgba(255,255,255,.06);
-      font-weight:800;
+      font-weight:900;
     }
     .bad{ color:#ff7b7b; border-color: rgba(255,123,123,.35); background: rgba(255,123,123,.08); }
     .good{ color:#9fffb0; border-color: rgba(159,255,176,.35); background: rgba(159,255,176,.08); }
@@ -57,30 +57,24 @@
     <div class="head">
       <div class="dot"></div>
       <div>
-        <div class="title">CargoWise-ish MVP</div>
-        <div class="sub">Script execution heartbeat test (no console)</div>
+        <div class="title">HEARTBEAT LIVE ✅</div>
+        <div class="sub">If these do not turn green, scripts are not running.</div>
       </div>
     </div>
 
     <div class="body">
-      <div class="build">BUILD: HEARTBEAT-1 (HTML)</div>
+      <div class="build">BUILD: HEARTBEAT-2 (HTML)</div>
 
-      <!-- Heartbeat indicators -->
       <div id="jsInline" class="statusLine bad">JS (inline): NOT RUNNING</div>
       <div id="jsApp" class="statusLine bad">JS (app.js): NOT RUNNING</div>
 
-      <div class="build" style="margin-top:14px;">
-        If both lines remain “NOT RUNNING”, your SafeView/isolation is stripping or sandboxing scripts.
-      </div>
-
-      <!-- If JS is truly disabled, this appears -->
       <noscript>
-        <div class="statusLine bad" style="margin-top:12px;">NOSCRIPT: JavaScript is disabled</div>
+        <div class="statusLine bad">NOSCRIPT: JavaScript is disabled</div>
       </noscript>
     </div>
   </div>
 
-  <!-- Inline script heartbeat -->
+  <!-- Inline heartbeat -->
   <script>
     (function(){
       var el = document.getElementById("jsInline");
@@ -91,8 +85,8 @@
     })();
   </script>
 
-  <!-- External script -->
-  <script src="./app.js?v=heartbeat1" defer></script>
+  <!-- External heartbeat -->
+  <script src="./app.js?v=heartbeat2"></script>
 </body>
 </html>
 ``
